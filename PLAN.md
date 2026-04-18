@@ -292,8 +292,8 @@ targeted-sequencing/
 6. ~~`GET /api/upload/status` — проверка наличия файлов~~ ✅
 7. ~~`DELETE /api/upload/clean` — очистка загруженных файлов~~ ✅
    - Конфигурация multer вынесена в отдельный middleware (`server/src/middleware/upload.ts`)
-8. Подключение роутов и error handler в server/src/index.ts
-9. API-клиент (client/src/api/client.ts) — axios обёртка
+8. ~~Подключение роутов и error handler в server/src/index.ts~~ ✅
+9. ~~API-клиент (client/src/api/client.ts) — axios обёртка~~ ✅
 10. ~~Ant Design `<Upload.Dragger>` для list_reads.txt и FASTQ~~ ✅
 11. ~~Прогресс-бары загрузки + статус загруженных файлов на UI~~ ✅
 12. ~~Обновление App.tsx и vite proxy timeout~~ ✅
@@ -305,22 +305,23 @@ targeted-sequencing/
 
 ### Фаза 1.5: Настройка ESLint + Prettier
 
-1. ESLint (flat config) + TypeScript + React плагины
-2. Prettier + eslint-config-prettier
-3. npm scripts: lint, format
-4. Форматирование всего существующего кода
+1. ~~ESLint (flat config) + TypeScript + React плагины~~ ✅
+2. ~~Prettier + eslint-config-prettier~~ ✅
+3. ~~npm scripts: lint, format~~ ✅
+4. ~~Форматирование всего существующего кода~~ ✅
+5. ~~Настройка VS Code (`.vscode/settings.json`: format on save, ESLint flat config)~~ ✅
 
 ### Фаза 2: Docker-оркестрация и управление пайплайном (бэкенд + фронтенд)
 
-1. `dockerService.ts` — spawn Docker, отслеживание состояния, захват stdout/stderr
-2. `POST /api/pipeline/run` — валидация файлов + запуск
-3. `GET /api/pipeline/status` — текущее состояние
-4. `GET /api/health` — проверка Docker + образа
-5. Восстановление состояния при рестарте — проверка `docker ps` на старте
-6. PipelineControls (Ant Design Button) + StatusBadge (Ant Design Tag/Badge)
-7. usePipelineStatus polling hook
-8. Блокировка повторного запуска
-9. Проверка Docker при старте (Ant Design Result для ошибок)
+1. ~~`dockerService.ts` — spawn Docker, отслеживание состояния, захват stdout/stderr~~ ✅
+2. ~~`POST /api/pipeline/run` — валидация файлов + запуск~~ ✅
+3. ~~`GET /api/pipeline/status` — текущее состояние~~ ✅
+4. ~~`GET /api/health` — проверка Docker + образа~~ ✅
+5. ~~Восстановление состояния при рестарте — проверка `docker ps` на старте~~ ✅
+6. ~~PipelineControls (Ant Design Button) + StatusBadge (Ant Design Tag/Badge)~~ ✅
+7. ~~usePipelineStatus polling hook~~ ✅
+8. ~~Блокировка повторного запуска~~ ✅
+9. ~~Проверка Docker при старте (Ant Design Result для ошибок)~~ ✅
 
 ### Фаза 3: Результаты и таблица (бэкенд + фронтенд)
 
@@ -352,9 +353,10 @@ targeted-sequencing/
 2. Запуск Express из main process как child process
 3. BrowserWindow → http://localhost:PORT
 4. Проверка Docker при старте приложения
-5. Сборка через electron-builder для Win/Mac/Linux
-6. Убедиться что все assets (иконки, шрифты) бандлятся локально
-7. Graceful shutdown: остановка Express + docker stop при закрытии приложения
+5. Автозапуск Docker Desktop, если daemon не запущен (Windows: `Docker Desktop.exe`, macOS: `open -a Docker`)
+6. Сборка через electron-builder для Win/Mac/Linux
+7. Убедиться что все assets (иконки, шрифты) бандлятся локально
+8. Graceful shutdown: остановка Express + docker stop при закрытии приложения
 
 ---
 

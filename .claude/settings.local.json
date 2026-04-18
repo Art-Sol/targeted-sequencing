@@ -17,7 +17,8 @@
       "Read(//tmp/app/**)",
       "Bash(npx eslint:*)",
       "Bash(code --install-extension dbaeumer.vscode-eslint)",
-      "Bash(code --install-extension esbenp.prettier-vscode)"
+      "Bash(code --install-extension esbenp.prettier-vscode)",
+      "Bash(node -e \"const os = require\\('os'\\); console.log\\('CPUs:', os.cpus\\(\\).length\\)\")"
     ]
   }
 }

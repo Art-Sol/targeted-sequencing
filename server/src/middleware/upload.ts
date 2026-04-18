@@ -1,5 +1,5 @@
 import multer from 'multer';
-import os from 'os';
+import os from 'node:os';
 import { MAX_FILE_SIZE } from '../consts.js';
 
 // ============================================================

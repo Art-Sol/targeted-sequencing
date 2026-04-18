@@ -7,6 +7,7 @@ export type {
   PipelineResults,
   PipelineStatus,
   PipelineStatusResponse,
+  HealthResponse,
   MetricType,
   UploadedFileInfo,
   UploadStatusResponse,

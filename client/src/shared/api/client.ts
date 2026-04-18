@@ -4,6 +4,8 @@ import type {
   UploadedFileInfo,
   ReadsListEntry,
   ValidationResult,
+  PipelineStatusResponse,
+  HealthResponse,
 } from '../model/types';
 
 // ============================================================
@@ -101,4 +103,42 @@ export async function getUploadStatus(): Promise<
  */
 export async function cleanUploads(): Promise<void> {
   await api.delete('/api/upload/clean');
+}
+
+// ============================================================
+// Проверка Docker-окружения
+// ============================================================
+
+/**
+ * Проверяет окружение: установлен ли Docker, загружен ли образ пайплайна.
+ * Вызывается при старте приложения.
+ */
+export async function checkHealth(): Promise<HealthResponse> {
+  const response = await api.get('/api/health');
+  return response.data;
+}
+
+// ============================================================
+// Управление пайплайном
+// ============================================================
+
+/**
+ * Запускает анализ. Перед запуском сервер сам проверяет,
+ * что все файлы загружены (list_reads.txt + FASTQ).
+ *
+ * Возвращает ID запуска (формат: 2024-01-15_143022).
+ * Если пайплайн уже запущен — сервер вернёт 409.
+ */
+export async function runPipeline(): Promise<{ message: string; runId: string }> {
+  const response = await api.post('/api/pipeline/run');
+  return response.data;
+}
+
+/**
+ * Получает текущий статус пайплайна.
+ * Фронтенд вызывает каждые 2-3 секунды (polling) во время анализа.
+ */
+export async function getPipelineStatus(): Promise<PipelineStatusResponse> {
+  const response = await api.get('/api/pipeline/status');
+  return response.data;
 }

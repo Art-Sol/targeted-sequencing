@@ -65,6 +65,15 @@ export interface PipelineStatusResponse {
   error?: string;
 }
 
+/** Ответ GET /api/health (проверка Docker-окружения) */
+export interface HealthResponse {
+  status: 'ok' | 'error';
+  docker: boolean;
+  daemon: boolean;
+  image: boolean;
+  message?: string;
+}
+
 /** Метрика для отображения в таблице */
 export type MetricType = 'mapped_reads' | 'rpkm';
 

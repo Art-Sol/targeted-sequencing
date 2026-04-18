@@ -10,7 +10,8 @@ import { STEPS } from '../module/consts';
 
 import classes from './UploadPage.module.css';
 import { Step } from '../module/types';
-import { FileUpload, Stepper } from '../../widgets';
+import { FileUpload, Stepper, PipelineControls } from '../../widgets';
+import { usePipelineStatus } from '../../shared/hooks/usePipelineStatus';
 
 const { Title, Paragraph } = Typography;
 const { Content } = Layout;
@@ -21,6 +22,7 @@ export const UploadPage = () => {
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [entries, setEntries] = useState<ReadsListEntry[]>([]);
   const [processing, setProcessing] = useState(false);
+  const pipeline = usePipelineStatus();
 
   // ------- Получение статуса с сервера -------
 
@@ -88,6 +90,14 @@ export const UploadPage = () => {
           onStepBack={() => setCurrentStep(0)}
           onStepForward={() => setCurrentStep(1)}
         />
+
+        {currentStep === 1 && validation?.valid && (
+          <PipelineControls
+            status={pipeline.status}
+            error={pipeline.error}
+            onStarted={pipeline.refresh}
+          />
+        )}
       </Flex>
     </Content>
   );

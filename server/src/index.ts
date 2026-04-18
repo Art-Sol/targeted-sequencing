@@ -1,7 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import uploadRouter from './routes/upload.js';
+import pipelineRouter from './routes/pipeline.js';
+import healthRouter from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { recoverState } from './services/dockerService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -32,46 +35,28 @@ app.use(express.json());
 // Роуты
 // ============================================================
 
-/**
- * Проверка здоровья сервера.
- * Используется для быстрой проверки: сервер запущен и отвечает.
- */
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
-});
-
-/**
- * app.use('/api/upload', uploadRouter) — подключает роутер загрузки файлов.
- *
- * Все роуты внутри uploadRouter будут доступны по путям:
- *   POST   /api/upload/reads-list
- *   POST   /api/upload/fastq
- *   GET    /api/upload/status
- *   DELETE /api/upload/clean
- */
+app.use('/api/health', healthRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/pipeline', pipelineRouter);
 
 // ============================================================
 // Обработка ошибок (должен быть ПОСЛЕДНИМ middleware)
 // ============================================================
 
-/**
- * Error handler ОБЯЗАН быть подключён после всех роутов.
- *
- * Express обрабатывает middleware в порядке подключения:
- *   1. cors()
- *   2. express.json()
- *   3. роуты (health, upload)
- *   4. errorHandler  ← сюда попадают все ошибки из шагов выше
- *
- * Если подключить errorHandler раньше роутов — он никогда не получит их ошибки.
- */
 app.use(errorHandler);
 
 // ============================================================
 // Запуск сервера
 // ============================================================
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+async function start() {
+  // Восстановление состояния: если Docker-контейнер пайплайна
+  // уже запущен (например, сервер перезагрузился), подхватываем его
+  await recoverState();
+
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+start();

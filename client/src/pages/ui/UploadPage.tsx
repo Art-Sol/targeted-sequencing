@@ -75,7 +75,7 @@ export const UploadPage = () => {
       />
       <Flex vertical justify="center" className={classes.stepContent}>
         <Title level={4}>{step.stepTitle}</Title>
-        <Paragraph type="secondary" style={{ marginBottom: 24 }}>
+        <Paragraph type="secondary" className={classes.stepDescription}>
           {step.stepDescription}
         </Paragraph>
         <FileUpload

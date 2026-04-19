@@ -2,15 +2,9 @@ import { Result, Button, Spin, Typography, Card } from 'antd';
 import { useState, useEffect } from 'react';
 import { checkHealth } from '../../../shared/api/client';
 import type { HealthResponse } from '../../../shared/model/types';
+import classes from './DockerCheck.module.css';
 
 const { Paragraph, Link } = Typography;
-
-const containerStyle: React.CSSProperties = {
-  maxWidth: 1200,
-  width: '100%',
-  margin: '0 auto',
-  padding: 16,
-};
 
 interface DockerCheckProps {
   children: React.ReactNode;
@@ -52,11 +46,11 @@ export const DockerCheck = ({ children }: DockerCheckProps) => {
 
   if (loading) {
     return (
-      <div style={containerStyle}>
+      <div className={classes.container}>
         <Spin
           size="large"
           tip="Проверка программного окружения..."
-          style={{ display: 'flex', justifyContent: 'center', marginTop: 200 }}
+          className={classes.spinner}
         />
       </div>
     );
@@ -64,7 +58,7 @@ export const DockerCheck = ({ children }: DockerCheckProps) => {
 
   if (!health || !health.docker) {
     return (
-      <div style={containerStyle}>
+      <div className={classes.container}>
         <Result
           status="warning"
           title="Docker не найден"
@@ -103,7 +97,7 @@ export const DockerCheck = ({ children }: DockerCheckProps) => {
 
   if (!health.daemon) {
     return (
-      <div style={containerStyle}>
+      <div className={classes.container}>
         <Result
           status="warning"
           title="Docker не запущен"
@@ -132,7 +126,7 @@ export const DockerCheck = ({ children }: DockerCheckProps) => {
 
   if (!health.image) {
     return (
-      <div style={containerStyle}>
+      <div className={classes.container}>
         <Result
           status="info"
           title="Docker-образ пайплайна не найден"

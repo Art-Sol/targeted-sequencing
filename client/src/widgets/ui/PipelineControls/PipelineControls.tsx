@@ -3,6 +3,7 @@ import { PlayCircleOutlined } from '@ant-design/icons';
 import { runPipeline } from '../../../shared/api/client';
 import type { PipelineStatus } from '../../../shared/model/types';
 import { StatusBadge } from './StatusBadge';
+import classes from './PipelineControls.module.css';
 
 interface PipelineControlsProps {
   status: PipelineStatus;
@@ -53,7 +54,7 @@ export const PipelineControls = ({ status, error, onStarted }: PipelineControlsP
                   key: '1',
                   label: 'Подробности ошибки',
                   children: (
-                    <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, margin: 0 }}>{error}</pre>
+                    <pre className={classes.errorDetails}>{error}</pre>
                   ),
                 },
               ]}

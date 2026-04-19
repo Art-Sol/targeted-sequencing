@@ -11,6 +11,7 @@ import type {
   ReadsListEntry,
 } from '../../../shared/model/types';
 import { formatBytes } from '../../../shared/lib/format/formatBytes';
+import classes from './FileUpload.module.css';
 
 const { Dragger } = Upload;
 const { Text } = Typography;
@@ -156,7 +157,7 @@ export const FileUpload = ({
             renderItem={(entry) => (
               <List.Item>
                 <Text code>{entry.sampleId}</Text>
-                <Text type="secondary" style={{ marginLeft: 8 }}>
+                <Text type="secondary" className={classes.modeLabel}>
                   {entry.mode === 'se' ? 'single-end' : 'paired-end'}
                   {' — '}
                   {entry.fastqPaths.map((p) => p.split('/').pop()).join(', ')}
@@ -198,7 +199,7 @@ export const FileUpload = ({
 
               {/* Результат валидации */}
               {validation && (
-                <div style={{ marginTop: 12 }}>
+                <div className={classes.validationResult}>
                   {validation.valid ? (
                     <Alert
                       type="success"

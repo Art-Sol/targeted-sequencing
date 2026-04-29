@@ -327,7 +327,7 @@ targeted-sequencing/
 8. ~~Блокировка повторного запуска~~ ✅
 9. ~~Проверка Docker при старте (Ant Design Result для ошибок)~~ ✅
 
-### Фаза 3: Результаты и таблица (бэкенд + фронтенд)
+### Фаза 3: Результаты и таблица (бэкенд + фронтенд) ✅
 
 1. ~~`GET /api/results` — чтение и парсинг JSON из output/~~ ✅
 2. ~~Валидация структуры JSON (Zod в shared/schemas, типы выведены через `z.infer`)~~ ✅
@@ -344,10 +344,13 @@ targeted-sequencing/
 - Базовый хук `useFetch<T>` с `AbortController`, `enabled` и защитой от race conditions; `useResults` и `usePipelineStatus` — адаптеры поверх него
 - Staging-директория через hardlinks + fire-and-forget запуск — пайплайн больше не падает на удалении входных FASTQ, а UI показывает `running` сразу после клика
 
-### Фаза 4: CSV экспорт
+### Фаза 4: CSV экспорт ✅
 
-1. buildCsv утилита
-2. CsvExportButton (Ant Design Button с иконкой DownloadOutlined)
+1. ~~`buildCsv` утилита (с UTF-8 BOM, CRLF, разделитель `;` для русского Excel)~~ ✅
+2. ~~`downloadFile` универсальная утилита (Blob + object URL + `<a download>`)~~ ✅
+3. ~~`CsvExportButton` (Ant Design Button с иконкой DownloadOutlined, `type="primary"`)~~ ✅
+4. ~~Интеграция в `StepActions` шага 3 рядом с «Запустить ещё раз» (показывается только при `pipeline.status === 'done' && results`)~~ ✅
+5. ~~Рефактор: `metric`-стейт поднят из `ResultsTable` в `UploadPage` (controlled component)~~ ✅
 
 ### Фаза 5: Обработка ошибок, история и полировка
 
@@ -367,6 +370,7 @@ targeted-sequencing/
 6. Сборка через electron-builder для Win/Mac/Linux
 7. Убедиться что все assets (иконки, шрифты) бандлятся локально
 8. Graceful shutdown: остановка Express + docker stop при закрытии приложения
+9. **Проверить CSV-экспорт в Electron-сборке.** Frontend использует `blob:` URL для скачивания CSV (`client/src/shared/lib/download.ts`). Если в `index.html` или через `webPreferences` задан строгий CSP — он должен разрешать `blob:` (например `default-src 'self' blob: data:;`). Иначе скачивание молча упадёт. Также убедиться, что нативный «Save As» диалог корректно открывается на всех трёх ОС.
 
 ---
 

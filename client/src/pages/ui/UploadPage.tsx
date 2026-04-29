@@ -6,12 +6,14 @@ import type {
   UploadStatusResponse,
   ValidationResult,
   ReadsListEntry,
+  MetricType,
 } from '../../shared/model/types';
 import { STEPS } from '../module/consts';
 
 import classes from './UploadPage.module.css';
 import { Step } from '../module/types';
 import { Stepper, StepActions } from '../../widgets';
+import { CsvExportButton } from '../../widgets/ui/ResultsTable/CsvExportButton';
 import { usePipelineStatus } from '../../shared/hooks/usePipelineStatus';
 import { useResults } from '../../shared/hooks/useResults';
 import { ReadsListStepContent, FastqStepContent, AnalysisStepContent } from './steps';
@@ -31,6 +33,7 @@ export const UploadPage = () => {
   const [processing, setProcessing] = useState(false);
   const [cleanLoading, setCleanLoading] = useState(false);
   const [runLoading, setRunLoading] = useState(false);
+  const [metric, setMetric] = useState<MetricType>('mapped_reads');
   const pipeline = usePipelineStatus();
 
   const {
@@ -190,6 +193,9 @@ export const UploadPage = () => {
           >
             {pipeline.status === 'done' ? 'Запустить ещё раз' : 'Запустить анализ'}
           </Button>
+          {pipeline.status === 'done' && results && (
+            <CsvExportButton results={results} metric={metric} runId={pipeline.runId} />
+          )}
         </StepActions>
       );
     }
@@ -245,6 +251,8 @@ export const UploadPage = () => {
             results={results}
             resultsLoading={resultsLoading}
             resultsError={resultsError}
+            metric={metric}
+            onMetricChange={setMetric}
           />
         )}
       </Flex>

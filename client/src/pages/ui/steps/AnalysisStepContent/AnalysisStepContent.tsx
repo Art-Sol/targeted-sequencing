@@ -1,7 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { Flex, Spin, Alert, message } from 'antd';
 import { PipelineControls, ResultsTable } from '../../../../widgets';
-import type { PipelineResults, PipelineStatus } from '../../../../shared/model/types';
+import type {
+  PipelineResults,
+  PipelineStatus,
+  MetricType,
+} from '../../../../shared/model/types';
 
 // ============================================================
 // Шаг 3 (currentStep=2): статус анализа + результаты
@@ -20,6 +24,12 @@ interface AnalysisStepContentProps {
   results: PipelineResults | null;
   resultsLoading: boolean;
   resultsError: string | null;
+  /**
+   * Текущая метрика и её сеттер. Состояние поднято в UploadPage —
+   * та же метрика нужна кнопке экспорта CSV в StepActions.
+   */
+  metric: MetricType;
+  onMetricChange: (metric: MetricType) => void;
 }
 
 export const AnalysisStepContent = ({
@@ -30,6 +40,8 @@ export const AnalysisStepContent = ({
   results,
   resultsLoading,
   resultsError,
+  metric,
+  onMetricChange,
 }: AnalysisStepContentProps) => {
   const prevStatusRef = useRef<PipelineStatus | null>(null);
   useEffect(() => {
@@ -63,7 +75,9 @@ export const AnalysisStepContent = ({
               description={resultsError}
             />
           )}
-          {results && <ResultsTable results={results} />}
+          {results && (
+            <ResultsTable results={results} metric={metric} onMetricChange={onMetricChange} />
+          )}
         </>
       )}
     </Flex>

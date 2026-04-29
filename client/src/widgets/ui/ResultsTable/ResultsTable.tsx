@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Table, Flex, Typography, Card } from 'antd';
 import type { TableColumnsType } from 'antd';
 import type { PipelineResults, MetricType } from '../../../shared/model/types';
@@ -10,6 +10,12 @@ const { Text } = Typography;
 
 interface ResultsTableProps {
   results: PipelineResults;
+  /**
+   * Текущая метрика. Состояние поднято в родителя (UploadPage), потому что
+   * та же метрика используется кнопкой экспорта CSV, живущей в StepActions.
+   */
+  metric: MetricType;
+  onMetricChange: (metric: MetricType) => void;
 }
 
 // ============================================================
@@ -26,9 +32,7 @@ function formatValue(value: number, metric: MetricType): string {
   return value.toLocaleString('ru-RU');
 }
 
-export const ResultsTable = ({ results }: ResultsTableProps) => {
-  const [metric, setMetric] = useState<MetricType>('mapped_reads');
-
+export const ResultsTable = ({ results, metric, onMetricChange }: ResultsTableProps) => {
   const matrix = useMemo(() => buildResultsMatrix(results, metric), [results, metric]);
 
   const columns = useMemo<TableColumnsType<ResultsRow>>(() => {
@@ -62,7 +66,7 @@ export const ResultsTable = ({ results }: ResultsTableProps) => {
       </Text>
       <Flex align="center">
         <Text className={classes.metricLabel}>Метрика:</Text>
-        <MetricToggle value={metric} onChange={setMetric} />
+        <MetricToggle value={metric} onChange={onMetricChange} />
       </Flex>
     </Flex>
   );

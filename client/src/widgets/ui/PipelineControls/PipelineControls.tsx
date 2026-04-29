@@ -1,48 +1,88 @@
-import { Button, Flex, Alert, Collapse, message } from 'antd';
-import { PlayCircleOutlined } from '@ant-design/icons';
-import { runPipeline } from '../../../shared/api/client';
+import { Flex, Alert, Collapse, Progress, Typography } from 'antd';
 import type { PipelineStatus } from '../../../shared/model/types';
-import { StatusBadge } from './StatusBadge';
 import classes from './PipelineControls.module.css';
+
+const { Text } = Typography;
+
+// ============================================================
+// PipelineControls — визуализация состояния пайплайна
+// ============================================================
+//
+// Ядро — круглый <Progress type="circle">. Внутри круга разный текст
+// в зависимости от состояния:
+//   - idle       → "Запустите анализ"
+//   - running    → XX% (или "Подготовка..." если totalSamples ещё не известен)
+//   - done/error → круг скрыт, снизу алерт
+//
+// Сам запуск анализа делает StepActions на уровне UploadPage — здесь
+// только обратная связь.
+// ============================================================
 
 interface PipelineControlsProps {
   status: PipelineStatus;
   error?: string;
-  onStarted: () => void;
+  /** Сколько образцов начато обработкой (для процента прогресса) */
+  samplesProcessed?: number;
+  /** Всего образцов в list_reads.txt */
+  totalSamples?: number;
 }
 
-export const PipelineControls = ({ status, error, onStarted }: PipelineControlsProps) => {
-  const isRunning = status === 'running';
+const CIRCLE_SIZE = 180;
 
-  const handleRun = async () => {
-    try {
-      await runPipeline();
-      message.success('Анализ запущен');
-      onStarted();
-    } catch (err) {
-      if (err instanceof Error) {
-        message.error(err.message);
-      }
-    }
-  };
+export const PipelineControls = ({
+  status,
+  error,
+  samplesProcessed,
+  totalSamples,
+}: PipelineControlsProps) => {
+  const isIdle = status === 'idle';
+  const isRunning = status === 'running';
+  const isError = status === 'error';
+
+  // Процент с кап'ом 95% — чтобы круг не «добегал» до 100% до фактического done
+  // (после последнего bwa ещё идут sort/index/RPKM, которые мы не считаем).
+  const percent =
+    isRunning && totalSamples && totalSamples > 0
+      ? Math.min(95, Math.round(((samplesProcessed ?? 0) / totalSamples) * 100))
+      : 0;
+
+  // Кастомный текст внутри круга. null — значит использовать дефолтный "XX%".
+  const innerText: string | null = (() => {
+    if (isIdle) return 'Запустите анализ';
+    if (isRunning && !totalSamples) return 'Подготовка...';
+    return null;
+  })();
+
+  // Круг рисуем только на стадиях, где он информативен. На done/error его
+  // заменяют таблица или алерт.
+  const showCircle = isIdle || isRunning;
 
   return (
-    <Flex vertical gap={16}>
-      <Flex align="center" gap={12}>
-        <Button
-          type="primary"
-          size="large"
-          icon={<PlayCircleOutlined />}
-          loading={isRunning}
-          disabled={isRunning}
-          onClick={handleRun}
-        >
-          {isRunning ? 'Анализ выполняется...' : 'Запустить анализ'}
-        </Button>
-        <StatusBadge status={status} />
-      </Flex>
+    <Flex vertical align="center" gap={16}>
+      {showCircle && (
+        <Progress
+          type="circle"
+          size={CIRCLE_SIZE}
+          percent={percent}
+          status={isRunning ? 'active' : 'normal'}
+          format={
+            innerText
+              ? () => <span className={classes.circleInnerLong}>{innerText}</span>
+              : undefined
+          }
+        />
+      )}
 
-      {status === 'error' && error && (
+      {/* Дополнительный хинт под кругом — только когда реально что-то считается */}
+      {isRunning && totalSamples && totalSamples > 0 && (
+        <Text type="secondary">
+          {(samplesProcessed ?? 0) > 0
+            ? `Обрабатывается образец ${samplesProcessed} из ${totalSamples}`
+            : 'Подготовка...'}
+        </Text>
+      )}
+
+      {isError && error && (
         <Alert
           type="error"
           message="Пайплайн завершился с ошибкой"
@@ -53,9 +93,7 @@ export const PipelineControls = ({ status, error, onStarted }: PipelineControlsP
                 {
                   key: '1',
                   label: 'Подробности ошибки',
-                  children: (
-                    <pre className={classes.errorDetails}>{error}</pre>
-                  ),
+                  children: <pre className={classes.errorDetails}>{error}</pre>,
                 },
               ]}
             />
@@ -63,9 +101,9 @@ export const PipelineControls = ({ status, error, onStarted }: PipelineControlsP
         />
       )}
 
-      {status === 'done' && (
-        <Alert type="success" message="Анализ успешно завершён" showIcon />
-      )}
+      {/* Alert «Анализ успешно завершён» вынесен в ResultsTable (footer таблицы)
+          — чтобы быть подле результатов, как в FastqStepContent: alert валидации
+          там лежит внутри Card вместе с таблицей загруженных файлов. */}
     </Flex>
   );
 };

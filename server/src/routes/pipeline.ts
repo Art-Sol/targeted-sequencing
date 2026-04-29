@@ -1,8 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import {
-  runPipeline,
-  getPipelineStatus,
-} from '../services/dockerService.js';
+import { runPipeline, getPipelineStatus } from '../services/dockerService.js';
 import { validateUploadedFiles } from '../services/fileService.js';
 
 // ============================================================
@@ -34,13 +31,6 @@ router.post('/run', async (_req: Request, res: Response, next: NextFunction) => 
 
     res.json({ message: 'Анализ запущен', runId });
   } catch (err) {
-    // Если пайплайн уже запущен (409), пробрасываем с правильным статусом
-    if (err instanceof Error && 'statusCode' in err) {
-      res.status((err as Error & { statusCode: number }).statusCode).json({
-        error: err.message,
-      });
-      return;
-    }
     next(err);
   }
 });

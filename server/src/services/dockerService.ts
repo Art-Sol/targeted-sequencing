@@ -9,7 +9,10 @@ import {
   OUTPUT_DIR,
   LOGS_DIR,
   PIPELINE_THREADS,
+  STAGING_DIR,
 } from '../consts';
+import { ConflictError } from '../errors';
+import { parseReadsList } from './fileService';
 
 // ============================================================
 // Состояние пайплайна (singleton — живёт в памяти сервера)
@@ -22,6 +25,8 @@ interface PipelineState {
   exitCode: number | null;
   error: string | null;
   stderrTail: string[];
+  totalSamples: number | null;
+  samplesProcessed: number;
 }
 
 const state: PipelineState = {
@@ -31,7 +36,13 @@ const state: PipelineState = {
   exitCode: null,
   error: null,
   stderrTail: [],
+  totalSamples: null,
+  samplesProcessed: 0,
 };
+
+// bwa пишет эту строку в stderr ОДИН РАЗ на каждый образец, в начале его
+// обработки. Считая вхождения, знаем какой образец сейчас идёт.
+const SAMPLE_START_MARKER = '[M::bwa_idx_load_from_disk]';
 
 // ============================================================
 // Публичные функции
@@ -44,53 +55,124 @@ export function getPipelineStatus() {
     runId: state.runId ?? undefined,
     exitCode: state.exitCode ?? undefined,
     error: state.error ?? undefined,
+    totalSamples: state.totalSamples ?? undefined,
+    samplesProcessed: state.samplesProcessed,
   };
 }
 
-/** Запустить Docker-контейнер с пайплайном */
-export async function runPipeline(): Promise<{ runId: string }> {
+/**
+ * Сбрасывает state в initial ('idle').
+ *
+ * Вызывается при очистке загруженных файлов — логика «начать с чистого листа».
+ * Бросает ConflictError если пайплайн в процессе работы: пока идёт анализ,
+ * трогать ни файлы, ни state нельзя.
+ */
+export function resetPipelineState(): void {
   if (state.status === 'running') {
-    throw Object.assign(new Error('Пайплайн уже запущен'), { statusCode: 409 });
+    throw new ConflictError('Нельзя очистить файлы во время работы анализа');
   }
-
-  // Генерируем уникальный ID запуска (формат: 2024-01-15_143022)
-  const now = new Date();
-  const runId = formatRunId(now);
-
-  // Создаём папки для вывода и логов
-  const runOutputDir = path.join(OUTPUT_DIR, runId);
-  await fs.mkdir(runOutputDir, { recursive: true });
-  await fs.mkdir(LOGS_DIR, { recursive: true });
-
-  // Путь к файлу результатов внутри контейнера
-  const resultsPathInContainer = '/app/output/results.json';
-
-  // Путь к лог-файлу на хосте
-  const logPath = path.join(LOGS_DIR, `pipeline_${runId}.log`);
-
-  // Сбрасываем состояние
-  state.status = 'running';
-  state.runId = runId;
+  state.status = 'idle';
+  state.runId = null;
   state.containerId = null;
   state.exitCode = null;
   state.error = null;
   state.stderrTail = [];
+  state.totalSamples = null;
+  state.samplesProcessed = 0;
+}
 
-  // Формируем аргументы docker run
+/**
+ * Запустить пайплайн.
+ *
+ * Синхронно ставит state.status='running' и возвращает runId — поэтому
+ * клиент через polling /api/pipeline/status сразу увидит «running»,
+ * не дожидаясь физической подготовки (создания директорий, staging,
+ * spawn'а Docker).
+ *
+ * Тяжёлая работа (hardlink'и FASTQ, запуск контейнера) идёт в фоне
+ * через runPipelineBackground. Её ошибки ловятся в .catch() и
+ * переводят state в 'error' — клиент увидит это на следующем poll.
+ */
+export async function runPipeline(): Promise<{ runId: string }> {
+  if (state.status === 'running') {
+    throw new ConflictError('Пайплайн уже запущен');
+  }
+
+  const runId = formatRunId(new Date());
+
+  // Сбрасываем state в running СРАЗУ
+  state.status = 'running';
+  state.runId = runId;
+  state.containerId = `pipeline-${runId}`;
+  state.exitCode = null;
+  state.error = null;
+  state.stderrTail = [];
+  state.totalSamples = null;
+  state.samplesProcessed = 0;
+
+  // Fire-and-forget: длительная подготовка + spawn в фоне.
+  // .catch() ОБЯЗАТЕЛЕН — без него unhandled rejection кладёт процесс Node.js.
+  runPipelineBackground(runId).catch((err: unknown) => {
+    console.error('[dockerService] Pipeline setup failed:', err);
+    state.status = 'error';
+    state.containerId = null;
+    state.error = err instanceof Error ? err.message : String(err);
+    // На всякий случай зачищаем staging, если он успел создаться
+    fs.rm(path.join(STAGING_DIR, runId), { recursive: true, force: true }).catch(() => {});
+  });
+
+  return { runId };
+}
+
+/**
+ * Фоновая подготовка и запуск контейнера.
+ *
+ * Здесь живёт вся длительная работа (staging + spawn + ручное управление
+ * lifecycle контейнера). Вынесена отдельно, чтобы HTTP-роут мог вернуться
+ * клиенту мгновенно, а эта функция отработала параллельно.
+ *
+ * Любая ошибка до spawn (mkdir, staging) бросается наверх и обрабатывается
+ * catch'ем в runPipeline. Ошибки после spawn обрабатываются handlers'ами
+ * child.on('close') / child.on('error') — state переводится в 'error' там.
+ */
+async function runPipelineBackground(runId: string): Promise<void> {
+  const runOutputDir = path.join(OUTPUT_DIR, runId);
+  const stagingDir = path.join(STAGING_DIR, runId);
+  const logPath = path.join(LOGS_DIR, `pipeline_${runId}.log`);
+  const resultsPathInContainer = '/app/output/results.json';
+
+  // Создаём все нужные директории (recursive: true = не падать если уже есть)
+  await fs.mkdir(runOutputDir, { recursive: true });
+  await fs.mkdir(stagingDir, { recursive: true });
+  await fs.mkdir(LOGS_DIR, { recursive: true });
+
+  // Staging: hardlink'и всех FASTQ в stagingDir. Оригиналы в INPUT_DATA_DIR
+  // не тронутся, пайплайн удалит только свои hardlink'и.
+  await prepareStaging(stagingDir);
+
+  // Для прогресс-бара: знаем сколько образцов всего в list_reads.txt.
+  // try/catch — если вдруг парсинг упал, просто не будет totalSamples,
+  // клиент покажет индетерминированный индикатор вместо процента.
+  try {
+    const entries = await parseReadsList();
+    state.totalSamples = entries.length;
+  } catch {
+    state.totalSamples = null;
+  }
+
+  // Аргументы docker run (точечные монтирования, без -w /work)
   const args = [
     'run',
     '--rm',
     '--name',
     `pipeline-${runId}`,
-    // Монтирование томов (точечное, не -w /work!)
     '-v',
     `${READS_LIST_PATH}:/app/list_reads.txt:ro`,
     '-v',
-    `${INPUT_DATA_DIR}:/app/input_data:ro`,
+    `${stagingDir}:/app/input_data`,
     '-v',
     `${runOutputDir}:/app/output`,
     DOCKER_IMAGE,
-    // Аргументы пайплайна
     '--reads-list',
     '/app/list_reads.txt',
     '--output',
@@ -99,35 +181,34 @@ export async function runPipeline(): Promise<{ runId: string }> {
     String(PIPELINE_THREADS),
   ];
 
-  // Запускаем Docker-контейнер
   const child = spawn('docker', args);
-
-  state.containerId = `pipeline-${runId}`;
-
-  // Открываем поток записи в лог-файл
   const logStream = await fs.open(logPath, 'w');
 
-  // Захватываем stdout
   child.stdout.on('data', (data: Buffer) => {
     const line = `[stdout] ${new Date().toISOString()} ${data.toString()}`;
     logStream.write(line);
   });
 
-  // Захватываем stderr (последние 50 строк храним в памяти для UI)
   child.stderr.on('data', (data: Buffer) => {
     const text = data.toString();
     const line = `[stderr] ${new Date().toISOString()} ${text}`;
     logStream.write(line);
 
-    // Сохраняем последние строки stderr для отображения ошибок в UI
     const lines = text.split('\n').filter((l) => l.trim());
     state.stderrTail.push(...lines);
     if (state.stderrTail.length > 50) {
       state.stderrTail = state.stderrTail.slice(-50);
     }
+
+    // Прогресс: bwa печатает SAMPLE_START_MARKER один раз на каждый образец.
+    // Считаем вхождения в этом чанке (он может содержать несколько строк).
+    // split(marker).length - 1 — это число splits, т.е. количество вхождений.
+    const markerCount = text.split(SAMPLE_START_MARKER).length - 1;
+    if (markerCount > 0) {
+      state.samplesProcessed += markerCount;
+    }
   });
 
-  // Обработка завершения процесса
   child.on('close', (code) => {
     logStream.close();
 
@@ -149,9 +230,11 @@ export async function runPipeline(): Promise<{ runId: string }> {
             : `Пайплайн завершился с кодом ${code}`;
       }
     }
+
+    fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  // Обработка ошибки запуска (Docker не найден, образ не найден)
+  // Ошибка запуска самого процесса Docker (например, бинарник не найден)
   child.on('error', (err) => {
     logStream.close();
 
@@ -163,9 +246,59 @@ export async function runPipeline(): Promise<{ runId: string }> {
     } else {
       state.error = err.message;
     }
-  });
 
-  return { runId };
+    fs.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+  });
+}
+
+/**
+ * Создаёт в stagingDir hardlink'и на все файлы из INPUT_DATA_DIR.
+ *
+ * Hardlink — это альтернативная directory entry для той же inode.
+ * ОС считает "staging/<runId>/foo.fastq" и "input_data/foo.fastq"
+ * одним и тем же файлом с двумя именами; физического копирования нет.
+ *
+ * Fallback на copyFile — для редких случаев, когда hardlink не работает
+ * (антивирус на Windows, экзотическая FS). Медленнее, занимает место,
+ * но гарантированно работает.
+ */
+async function prepareStaging(stagingDir: string): Promise<void> {
+  const files = await fs.readdir(INPUT_DATA_DIR);
+  await Promise.all(
+    files.map(async (name) => {
+      const src = path.join(INPUT_DATA_DIR, name);
+      const dst = path.join(stagingDir, name);
+      try {
+        await fs.link(src, dst);
+      } catch {
+        // Fallback — физическое копирование
+        await fs.copyFile(src, dst);
+      }
+    }),
+  );
+}
+
+/**
+ * Удаляет осиротевшие staging-папки от упавших/прерванных запусков.
+ *
+ * Вызывается при старте сервера. Пропускает папку, соответствующую
+ * активному runId (если есть восстановленный контейнер из recoverState) —
+ * её трогать нельзя, пайплайн с ней сейчас работает.
+ */
+export async function cleanupStaging(): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(STAGING_DIR);
+  } catch {
+    // Папки нет — нечего чистить
+    return;
+  }
+
+  const activeRunId = state.runId;
+  for (const name of entries) {
+    if (name === activeRunId) continue;
+    await fs.rm(path.join(STAGING_DIR, name), { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 // ============================================================

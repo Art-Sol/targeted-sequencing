@@ -10,6 +10,8 @@ import {
   validateUploadedFiles,
   cleanInputData,
 } from '../services/fileService.js';
+import { resetPipelineState } from '../services/dockerService.js';
+import { BadRequestError } from '../errors.js';
 
 // ============================================================
 // Роутер
@@ -41,8 +43,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.file) {
-        res.status(400).json({ error: 'Файл не выбран' });
-        return;
+        throw new BadRequestError('Файл не выбран');
       }
 
       await saveReadsList(req.file.path);
@@ -85,8 +86,7 @@ router.post(
       const files = req.files as Express.Multer.File[] | undefined;
 
       if (!files || files.length === 0) {
-        res.status(400).json({ error: 'Файлы не выбраны' });
-        return;
+        throw new BadRequestError('Файлы не выбраны');
       }
 
       const saved = [];
@@ -148,6 +148,9 @@ router.get('/status', async (_req: Request, res: Response, next: NextFunction) =
  */
 router.delete('/clean', async (_req: Request, res: Response, next: NextFunction) => {
   try {
+    // Сброс state ПЕРЕД очисткой: если пайплайн работает — бросит ConflictError,
+    // и cleanInputData не выполнится (файлы не тронем).
+    resetPipelineState();
     await cleanInputData();
     res.json({ message: 'Загруженные файлы удалены' });
   } catch (err) {

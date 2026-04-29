@@ -3,8 +3,9 @@ import cors from 'cors';
 import uploadRouter from './routes/upload.js';
 import pipelineRouter from './routes/pipeline.js';
 import healthRouter from './routes/health.js';
+import resultsRouter from './routes/results.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import { recoverState } from './services/dockerService.js';
+import { recoverState, cleanupStaging } from './services/dockerService.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -38,6 +39,7 @@ app.use(express.json());
 app.use('/api/health', healthRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/pipeline', pipelineRouter);
+app.use('/api/results', resultsRouter);
 
 // ============================================================
 // Обработка ошибок (должен быть ПОСЛЕДНИМ middleware)
@@ -53,6 +55,11 @@ async function start() {
   // Восстановление состояния: если Docker-контейнер пайплайна
   // уже запущен (например, сервер перезагрузился), подхватываем его
   await recoverState();
+
+  // Зачистка осиротевших staging-папок от упавших/прерванных запусков.
+  // Вызываем ПОСЛЕ recoverState, чтобы функция знала про активный runId
+  // (восстановленный контейнер) и не грохнула staging, который ему нужен.
+  await cleanupStaging();
 
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

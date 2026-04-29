@@ -193,8 +193,11 @@ targeted-sequencing/
 - Фронтенд поллит `GET /api/pipeline/status` каждые 2-3 секунды
 - **Future improvement**: перейти на SSE (Server-Sent Events) для мгновенного обновления статуса и стриминга логов
 - Threads = `Math.max(1, os.cpus().length - 1)` — автоматический подбор по количеству ядер CPU (оставляем 1 ядро системе)
-- **Монтирование томов**: НЕ использовать `-w /work` — это ломает внутренние пути контейнера (WORKDIR образа = `/app`). Монтировать точечно: `list_reads.txt` → `/app/list_reads.txt`, `input_data/` → `/app/input_data/`, выходную папку → `/app/output/`. Путь к результату задаётся через `--output /app/output/results.json`
-- **Пайплайн удаляет входные данные** после завершения (`input_data/`, `quantification/`, `aligned/`). Это значит, что FASTQ-файлы в рабочей папке будут удалены. Нужно либо копировать файлы перед запуском, либо монтировать input_data как read-only (`:ro`), либо хранить оригиналы отдельно от рабочей директории
+- **Монтирование томов**: НЕ использовать `-w /work` — это ломает внутренние пути контейнера (WORKDIR образа = `/app`). Монтировать точечно: `list_reads.txt` → `/app/list_reads.txt:ro`, `staging/<run_id>/` → `/app/input_data/` (RW, без `:ro` — см. staging ниже), выходную папку `output/<run_id>/` → `/app/output/`. Путь к результату задаётся через `--output /app/output/results.json`
+- **Пайплайн удаляет входные данные** после завершения (`input_data/`, `quantification/`, `aligned/`). Чтобы не терять оригиналы пользователя, используется **staging-директория** (см. ниже).
+- **Staging-директория для FASTQ.** Перед каждым запуском создаётся `pipeline-workdir/staging/<run_id>/`, куда через `fs.link` («hardlink'и») проецируются все файлы из `input_data/`. Hardlink — альтернативная directory entry для той же inode: один и тот же физический файл имеет два имени, без дублирования данных на диске. Операция мгновенная (миллисекунды даже для 10 GB FASTQ) и не требует свободного места. В контейнер монтируется `staging/<run_id>/`, не `input_data/` — пайплайн удаляет из неё hardlink'и, а оригиналы в `input_data/` остаются (у inode ещё есть ссылка из оригинального файла). Fallback: если `fs.link` недоступен (редкий случай — антивирус, экзотическая FS) — `fs.copyFile`.
+- **Fire-and-forget запуск.** `POST /api/pipeline/run` не ждёт подготовки — сразу переводит `state.status = 'running'` и возвращает HTTP 200 с `runId`. Длительная работа (создание staging, spawn контейнера) идёт в фоне через `runPipelineBackground(runId).catch(...)`. Ошибки подготовки переводят state в `'error'`; клиент узнаёт через polling `/api/pipeline/status`. Это стандартный паттерн для long-running jobs: быстрый ACK + асинхронный statefull polling. `.catch()` на фоновом промисе обязателен — иначе unhandled rejection положит процесс Node.js.
+- **Очистка осиротевших staging при старте сервера.** Если сервер упал во время работы пайплайна, его staging-папка остаётся на диске. При старте вызывается `cleanupStaging()`, который удаляет все подпапки в `staging/`, кроме соответствующей активному `runId` (восстановленному через `recoverState`).
 
 ### Проверка Docker при старте
 
@@ -257,6 +260,7 @@ targeted-sequencing/
 - Логи записываются в файл `pipeline-workdir/logs/pipeline_<timestamp>.log` (stdout + stderr с таймстампами)
 - Фронтенд получает статус ошибки через `GET /api/pipeline/status` с полем `error` (последние строки stderr)
 - Обработка конкретных сценариев:
+  - Ошибка подготовки (staging, mkdir) до spawn — ловится в `.catch()` на фоновом промисе, `state.status='error'`, `state.error = err.message`, staging папка чистится
   - `exitCode !== 0` → "Пайплайн завершился с ошибкой" + stderr
   - spawn `ENOENT` → "Docker не запущен"
   - `exitCode === 137` → "Нехватка памяти (OOM)"
@@ -325,14 +329,20 @@ targeted-sequencing/
 
 ### Фаза 3: Результаты и таблица (бэкенд + фронтенд)
 
-1. `GET /api/results` — чтение и парсинг JSON из output/
-2. Валидация структуры JSON
-3. useResults hook — загрузка и трансформация данных
-4. Матричная трансформация: union determinant_id, заполнение нулей
-5. ResultsTable: Ant Design Table с динамическими колонками
-6. MetricToggle (Ant Design Radio.Group: mapped_reads / RPKM)
-7. Зелёная подсветка нулей (через `onCell` → style)
-8. Sticky-колонка + горизонтальный скролл (Ant Design Table `scroll={{ x: true }}` + `fixed: 'left'`)
+1. ~~`GET /api/results` — чтение и парсинг JSON из output/~~ ✅
+2. ~~Валидация структуры JSON (Zod в shared/schemas, типы выведены через `z.infer`)~~ ✅
+3. ~~useResults hook — загрузка и трансформация данных (поверх обобщённого `useFetch`)~~ ✅
+4. ~~Матричная трансформация: union determinant_id, заполнение нулей (`buildResultsMatrix`)~~ ✅
+5. ~~ResultsTable: Ant Design Table с динамическими колонками~~ ✅
+6. ~~MetricToggle (Ant Design Radio.Group: mapped_reads / RPKM)~~ ✅
+7. ~~Зелёная подсветка нулей (через `onCell` → className)~~ ✅
+8. ~~Sticky-колонка + горизонтальный скролл (`scroll={{ x: 'max-content' }}` + `fixed: 'left'`)~~ ✅
+
+Бонусом сделано по ходу фазы:
+
+- Иерархия HTTP-ошибок (`HttpError` → `NotFoundError` / `ConflictError` / `BadRequestError`), централизованный `errorHandler` распознаёт их по `instanceof` — роуты и сервисы унифицированы
+- Базовый хук `useFetch<T>` с `AbortController`, `enabled` и защитой от race conditions; `useResults` и `usePipelineStatus` — адаптеры поверх него
+- Staging-директория через hardlinks + fire-and-forget запуск — пайплайн больше не падает на удалении входных FASTQ, а UI показывает `running` сразу после клика
 
 ### Фаза 4: CSV экспорт
 
@@ -425,7 +435,7 @@ targeted-sequencing/
   }
   ```
 - [x] **Точный путь к файлу результатов** — по умолчанию `results.json` в рабочей директории контейнера (`/app/results.json`). Можно задать через `--output <path>`
-- [x] **Команда запуска Docker**: монтировать `list_reads.txt` → `/app/list_reads.txt`, `input_data/` → `/app/input_data/`, точку вывода → `/app/output/`. НЕ использовать `-w /work` — это ломает внутренние пути контейнера. Аргументы: `--reads-list /app/list_reads.txt --output /app/output/results.json --threads N`
+- [x] **Команда запуска Docker**: монтировать `list_reads.txt` → `/app/list_reads.txt:ro`, `staging/<run_id>/` → `/app/input_data/` (RW, с hardlink'ами оригинальных FASTQ; см. «Staging-директория для FASTQ» выше), точку вывода `output/<run_id>/` → `/app/output/`. НЕ использовать `-w /work` и НЕ монтировать `input_data` с `:ro` (пайплайн штатно удаляет свои входы и упадёт `EROFS`). Аргументы: `--reads-list /app/list_reads.txt --output /app/output/results.json --threads N`
 - [x] **Формат list_reads.txt** — TSV (разделитель — табуляция), колонки:
   1. `sample_id` — имя образца (например, `sample1`)
   2. `type` — `se` (single-end) или `pe` (paired-end)

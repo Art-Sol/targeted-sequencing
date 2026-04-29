@@ -1,57 +1,18 @@
 // ============================================================
 // Типы данных пайплайна таргетного секвенирования
-// Основаны на реальном выходном JSON targets-pipeline:0.1.0
 // ============================================================
 
-/** Один детерминант (таргет) внутри образца */
-export interface Determinant {
-  determinant_id: string;
-  reference_length: number;
-  mapped_reads: number;
-  rpkm: number;
-}
-
-/** Режим секвенирования: single-end или paired-end */
-export type InputMode = 'se' | 'pe';
-
-/** Результаты анализа одного образца */
-export interface Sample {
-  sample_id: string;
-  total_mapped_reads: number;
-  n_determinants: number;
-  n_detected_determinants: number;
-  determinants: Determinant[];
-  input_mode: InputMode;
-  input_fastq_files: string[];
-  bam_file: string;
-  bam_index: string;
-  rpkm_table: string;
-}
-
-/** Метаданные запуска пайплайна */
-export interface PipelineInfo {
-  name: string;
-  version: string;
-  run_datetime_utc: string;
-  threads: number;
-}
-
-/** Сводная статистика по всем образцам */
-export interface PipelineSummary {
-  n_samples: number;
-  total_mapped_reads_across_samples: number;
-  total_detected_determinants_across_samples: number;
-}
-
-/** Полный JSON-ответ пайплайна (results.json) */
-export interface PipelineResults {
-  pipeline: PipelineInfo;
-  summary: PipelineSummary;
-  samples: Sample[];
-}
+export type {
+  Determinant,
+  InputMode,
+  Sample,
+  PipelineInfo,
+  PipelineSummary,
+  PipelineResults,
+} from './schemas/pipelineResults';
 
 // ============================================================
-// Типы для API и UI
+// Типы для API и UI (не связаны со схемой results.json)
 // ============================================================
 
 /** Статус пайплайна */
@@ -63,6 +24,8 @@ export interface PipelineStatusResponse {
   runId?: string;
   exitCode?: number;
   error?: string;
+  samplesProcessed?: number;
+  totalSamples?: number;
 }
 
 /** Ответ GET /api/health (проверка Docker-окружения) */
@@ -99,7 +62,7 @@ export interface UploadStatusResponse {
 /** Одна строка из list_reads.txt (парсинг TSV) */
 export interface ReadsListEntry {
   sampleId: string;
-  mode: InputMode; // 'se' или 'pe'
+  mode: 'se' | 'pe';
   fastqPaths: string[]; // 1 путь для se, 2 для pe
 }
 

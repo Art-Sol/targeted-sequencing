@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
+import { HttpError } from '../errors.js';
 
 /**
  * Централизованный обработчик ошибок Express.
@@ -12,6 +13,11 @@ import multer from 'multer';
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
   // Логируем ошибку на сервере для диагностики
   console.error(`[${new Date().toISOString()}] Error:`, err.message);
+
+  if (err instanceof HttpError) {
+    res.status(err.statusCode).json({ error: err.message });
+    return;
+  }
 
   // Обработка ошибок multer (загрузка файлов)
   if (err instanceof multer.MulterError) {

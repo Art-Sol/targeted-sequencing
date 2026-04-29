@@ -1,9 +1,10 @@
 import { Steps } from 'antd';
 import { FC } from 'react';
 import { Step } from '../../../pages/module/types';
-import { ReadsListEntry, ValidationResult } from '../../../shared/model/types';
+import { PipelineStatus, ReadsListEntry, ValidationResult } from '../../../shared/model/types';
 import { FileTextOutlined, ProfileOutlined, TableOutlined } from '@ant-design/icons';
 import { Typography } from 'antd';
+import classes from './Stepper.module.css';
 const { Text } = Typography;
 
 type StepStatus = 'current' | 'finish' | 'wait' | 'process';
@@ -15,6 +16,8 @@ interface StepperProps {
   processing: boolean;
   entries: ReadsListEntry[];
   validation: ValidationResult | null;
+  /** Статус пайплайна — нужен, чтобы шаг "Таблица" подсвечивать как finish после done */
+  pipelineStatus: PipelineStatus;
 }
 
 const COLORS_MAP: Partial<Record<StepStatus, string>> = {
@@ -30,6 +33,7 @@ export const Stepper: FC<StepperProps> = ({
   processing,
   entries,
   validation,
+  pipelineStatus,
 }) => {
   // ------- Статус шагов для Steps -------
   const getStepStatus = (stepIndex: number) => {
@@ -43,7 +47,9 @@ export const Stepper: FC<StepperProps> = ({
       // Шаг 2: finish только если все FASTQ-файлы загружены
       case 1:
         return validation?.valid ? 'finish' : 'wait';
-      // Всё остальное — серый (не выполнен)
+      // Шаг 3: finish после успешного завершения пайплайна.
+      case 2:
+        return pipelineStatus === 'done' ? 'finish' : 'wait';
       default:
         return 'wait';
     }
@@ -62,7 +68,11 @@ export const Stepper: FC<StepperProps> = ({
 
         return {
           title: (
-            <Text strong style={color ? { color } : undefined}>
+            <Text
+              strong
+              className={i === currentStep ? classes.currentTitle : undefined}
+              style={color ? { color } : undefined}
+            >
               {s.title}
             </Text>
           ),

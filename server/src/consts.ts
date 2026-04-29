@@ -39,5 +39,12 @@ export const OUTPUT_DIR = path.join(WORKDIR, 'output');
 /** Папка для логов пайплайна */
 export const LOGS_DIR = path.join(WORKDIR, 'logs');
 
+/**
+ * Папка для staging-копий FASTQ на время одного запуска пайплайна.
+ * Каждый запуск получает подпапку staging/<runId>/, куда через hardlinks
+ * «копируются» оригинальные FASTQ из input_data/.
+ */
+export const STAGING_DIR = path.join(WORKDIR, 'staging');
+
 /** Количество потоков для пайплайна: все ядра CPU минус 1 (оставляем системе) */
 export const PIPELINE_THREADS = Math.max(1, os.cpus().length - 1);

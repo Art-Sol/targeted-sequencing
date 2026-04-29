@@ -7,6 +7,7 @@ import type {
   ValidationResult,
 } from '../types/index.js';
 import { DISK_WARNING_THRESHOLD } from '../consts.js';
+import { BadRequestError } from '../errors.js';
 
 // ============================================================
 // Константы — пути к рабочим директориям
@@ -115,7 +116,7 @@ export async function saveFastqFile(tempPath: string, originalName: string): Pro
   if (!isFastqExtension(originalName)) {
     // Удаляем temp-файл, чтобы не засорять диск
     await fs.unlink(tempPath).catch(() => {});
-    throw new Error(
+    throw new BadRequestError(
       `Недопустимое расширение файла: "${originalName}". ` +
         `Допустимые: ${VALID_FASTQ_EXTENSIONS.join(', ')}`,
     );
@@ -159,11 +160,15 @@ export async function parseReadsList(): Promise<ReadsListEntry[]> {
     .filter((line) => line.length > 0); // пропускаем пустые строки
 
   if (lines.length === 0) {
-    throw new Error('Файл list_reads.txt пуст.');
+    throw new BadRequestError('Файл list_reads.txt пуст.');
   }
 
   const entries: ReadsListEntry[] = [];
   const errors: string[] = [];
+  // sample_id должен быть уникальным: это ключ образца в downstream-коде
+  // (results.json → строка в ResultsTable, rowKey в UI). Дубль здесь — это
+  // битый файл, лучше упасть с понятной ошибкой, чем тащить его дальше.
+  const seenSampleIds = new Map<string, number>();
 
   for (let i = 0; i < lines.length; i++) {
     const lineNum = i + 1;
@@ -195,13 +200,23 @@ export async function parseReadsList(): Promise<ReadsListEntry[]> {
       continue;
     }
 
+    // Дубль sample_id — указываем номер строки, где он встречался впервые
+    const firstSeenAt = seenSampleIds.get(sampleId);
+    if (firstSeenAt !== undefined) {
+      errors.push(
+        `Строка ${lineNum}: дубль sample_id "${sampleId}" (уже встречался в строке ${firstSeenAt})`,
+      );
+      continue;
+    }
+    seenSampleIds.set(sampleId, lineNum);
+
     const fastqPaths = fields.slice(2); // все поля после sample_id и mode
 
     entries.push({ sampleId, mode, fastqPaths });
   }
 
   if (errors.length > 0) {
-    throw new Error(`Ошибки в list_reads.txt:\n${errors.join('\n')}`);
+    throw new BadRequestError(`Ошибки в list_reads.txt:\n${errors.join('\n')}`);
   }
 
   return entries;

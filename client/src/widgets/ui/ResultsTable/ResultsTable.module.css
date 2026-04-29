@@ -1,0 +1,19 @@
+/*
+ * Подсветка нулевых ячеек. Семантика: "таргет не обнаружен" — это
+ * хороший результат (в клинической диагностике), поэтому зелёный
+ */
+.zeroCell.zeroCell {
+  background-color: #f6ffed; /* Ant Design @success-bg */
+}
+
+.nowrapHeader.nowrapHeader {
+  white-space: nowrap;
+}
+
+.metricLabel {
+  margin-right: 8px;
+}
+
+.cardTitle {
+  margin: 16px 0;
+}

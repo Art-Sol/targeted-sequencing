@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import type {
   UploadStatusResponse,
   UploadedFileInfo,
@@ -6,6 +6,8 @@ import type {
   ValidationResult,
   PipelineStatusResponse,
   HealthResponse,
+  PipelineResults,
+  ApiError,
 } from '../model/types';
 
 // ============================================================
@@ -13,6 +15,36 @@ import type {
 // ============================================================
 
 const api = axios.create();
+
+// ============================================================
+// Response interceptor: разворачиваем ошибку сервера
+// ============================================================
+//
+// Сервер при ошибке возвращает JSON { error: "понятный текст" }
+// (см. errorHandler.ts). По умолчанию axios теряет это сообщение:
+// AxiosError.message = "Request failed with status code 500".
+//
+// Здесь мы один раз централизованно достаём error.response.data.error
+// и подкладываем его как message в обычный Error. Дальше во всех
+// catch-блоках бизнес-логики `err.message` — это уже человеко-читаемое
+// сообщение от сервера, а не axios-дефолт.
+//
+// Если запрос отменён через AbortController — пробрасываем как есть,
+// чтобы useFetch / другие места могли отличить отмену от настоящей ошибки.
+// ============================================================
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError<ApiError>) => {
+    if (axios.isCancel(error) || error.code === 'ERR_CANCELED') {
+      return Promise.reject(error);
+    }
+    const serverMessage = error.response?.data?.error;
+    if (serverMessage) {
+      return Promise.reject(new Error(serverMessage));
+    }
+    return Promise.reject(error);
+  },
+);
 
 // ============================================================
 // Загрузка list_reads.txt
@@ -137,8 +169,28 @@ export async function runPipeline(): Promise<{ message: string; runId: string }>
 /**
  * Получает текущий статус пайплайна.
  * Фронтенд вызывает каждые 2-3 секунды (polling) во время анализа.
+ *
+ * @param signal — AbortSignal для отмены запроса (см. useFetch)
  */
-export async function getPipelineStatus(): Promise<PipelineStatusResponse> {
-  const response = await api.get('/api/pipeline/status');
+export async function getPipelineStatus(signal?: AbortSignal): Promise<PipelineStatusResponse> {
+  const response = await api.get('/api/pipeline/status', { signal });
+  return response.data;
+}
+
+// ============================================================
+// Результаты пайплайна
+// ============================================================
+
+/**
+ * Получает результаты последнего успешного запуска пайплайна.
+ *
+ * Возможные ошибки (axios выбросит исключение):
+ * - 404 — ни одного запуска ещё не было, либо results.json не создан
+ * - 500 — файл результатов повреждён / не прошёл валидацию схемы
+ *
+ * @param signal — AbortSignal для отмены запроса (см. useFetch)
+ */
+export async function getResults(signal?: AbortSignal): Promise<PipelineResults> {
+  const response = await api.get('/api/results', { signal });
   return response.data;
 }

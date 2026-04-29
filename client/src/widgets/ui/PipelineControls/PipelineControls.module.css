@@ -3,3 +3,14 @@
   font-size: 12px;
   margin: 0;
 }
+
+/* Длинный текст внутри круглого прогресса ("Запустите анализ", "Подготовка...").
+   Стандартный формат AntD Progress рассчитан под "XX%" — крупный шрифт, ~30%
+   диаметра круга — для строки в 14+ символов это переполнение. */
+.circleInnerLong {
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

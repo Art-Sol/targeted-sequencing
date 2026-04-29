@@ -1,51 +1,44 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import { getPipelineStatus } from '../api/client';
-import type { PipelineStatusResponse } from '../model/types';
+import { useFetch } from './useFetch';
 
-const POLL_INTERVAL = 2000; // 2 секунды
+// Интервал polling'а во время `running`. 1 секунда — компромисс:
+// - На быстрых тестовых запусках (2-3 сек) успеваем поймать промежуточные
+//   состояния и отрисовать прогресс.
+// - На длинных прогонах (минуты-десятки минут) нагрузка незначительна:
+//   1 запрос/сек × 30 мин = 1800 дешёвых запросов к in-memory state.
+const POLL_INTERVAL = 1000;
+
+// ============================================================
+// usePipelineStatus — статус пайплайна + polling
+// ============================================================
 
 /**
- * Хук для отслеживания статуса пайплайна.
+ * Хук отслеживает статус пайплайна.
  *
- * Polling работает только когда статус === 'running'.
- * В состояниях idle / done / error — не опрашивает сервер
- * (незачем тратить ресурсы, статус не изменится сам).
- *
- * @returns { status, runId, error, refresh }
- *   - status  — текущий статус пайплайна
- *   - runId   — ID текущего/последнего запуска
- *   - error   — текст ошибки (если статус === 'error')
- *   - refresh — функция для ручного обновления (вызывать после runPipeline)
+ * Возвращает:
+ * - status  — 'idle' | 'running' | 'done' | 'error' (по умолчанию 'idle')
+ * - runId   — ID текущего/последнего запуска
+ * - error   — текст ошибки пайплайна (из /api/pipeline/status), если status === 'error'
+ * - refresh — ручное обновление (вызывать после запуска пайплайна для быстрой смены UI)
  */
 export function usePipelineStatus() {
-  const [data, setData] = useState<PipelineStatusResponse>({ status: 'idle' });
+  const { data, refetch } = useFetch(getPipelineStatus);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await getPipelineStatus();
-      setData(result);
-    } catch {
-      console.error('Ошибка при получении статуса пайплайна');
-    }
-  }, []);
-
-  // Первый запрос — узнать текущий статус при монтировании
+  // Слой polling: активен только в состоянии 'running'.
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (data?.status !== 'running') return;
 
-  // Polling: опрашиваем сервер только когда пайплайн работает
-  useEffect(() => {
-    if (data.status !== 'running') return;
-
-    const interval = setInterval(refresh, POLL_INTERVAL);
+    const interval = setInterval(refetch, POLL_INTERVAL);
     return () => clearInterval(interval);
-  }, [data.status, refresh]);
+  }, [data?.status, refetch]);
 
   return {
-    status: data.status,
-    runId: data.runId,
-    error: data.error,
-    refresh,
+    status: data?.status ?? 'idle',
+    runId: data?.runId,
+    error: data?.error,
+    samplesProcessed: data?.samplesProcessed,
+    totalSamples: data?.totalSamples,
+    refresh: refetch,
   };
 }

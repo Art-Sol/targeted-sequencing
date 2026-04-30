@@ -1,8 +1,10 @@
 export { FileUpload } from './ui/FileUpload/FileUpload';
 export { Stepper } from './ui/Stepper/Stepper';
-export { PipelineControls } from './ui/PipelineControls/PipelineControls';
-export { StatusBadge } from './ui/PipelineControls/StatusBadge';
+export { PipelineStatus } from './ui/PipelineStatus/PipelineStatus';
+export { StatusBadge } from './ui/PipelineStatus/StatusBadge';
 export { DockerCheck } from './ui/DockerCheck/DockerCheck';
 export { ResultsTable } from './ui/ResultsTable/ResultsTable';
-export { RunSelector } from './ui/ResultsTable/RunSelector';
+export { RunSelector } from './ui/RunSelector/RunSelector';
 export { StepActions } from './ui/StepActions/StepActions';
+export { HeaderNav } from './ui/HeaderNav/HeaderNav';
+export { PageNames } from './ui/HeaderNav/consts';

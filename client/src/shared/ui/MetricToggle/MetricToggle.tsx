@@ -1,5 +1,5 @@
 import { Switch } from 'antd';
-import type { MetricType } from '../../../shared/model/types';
+import type { MetricType } from '../../model/types';
 
 interface MetricToggleProps {
   value: MetricType;

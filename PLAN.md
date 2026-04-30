@@ -352,13 +352,34 @@ targeted-sequencing/
 4. ~~Интеграция в `StepActions` шага 3 рядом с «Запустить ещё раз» (показывается только при `pipeline.status === 'done' && results`)~~ ✅
 5. ~~Рефактор: `metric`-стейт поднят из `ResultsTable` в `UploadPage` (controlled component)~~ ✅
 
-### Фаза 5: Обработка ошибок, история и полировка
+### Фаза 5: Обработка ошибок, история и полировка ✅
 
-1. UI-ошибки: нет файлов, Docker не запущен, пайплайн упал, невалидный JSON
-2. Ant Design message/notification для toast-уведомлений
-3. Loading states (Ant Design Spin/Skeleton)
-4. История запусков: UI-селектор + эндпоинты `/api/results/runs`, `/api/results/:runId`
-5. Управление дисковым пространством: кнопка очистки + предупреждение о нехватке места
+1. ~~UI-ошибки: нет файлов, Docker не запущен, пайплайн упал, невалидный JSON~~ ✅
+2. ~~Ant Design message/notification для toast-уведомлений~~ ✅
+3. ~~Loading states (Ant Design Spin/Skeleton)~~ ✅
+4. ~~История запусков: UI-селектор + эндпоинты `/api/results/runs`, `/api/results/:runId`~~ ✅
+5. ~~Управление дисковым пространством: кнопка очистки + предупреждение о нехватке места~~ ✅
+
+Бонусом сделано по ходу фазы:
+
+- Бэкенд: `RUN_ID_REGEX` (`YYYY-MM-DD_HHmmss`) защищает `/api/results/:runId` от path-traversal; `getLatestResults` рефакторнут как надстройка над `listRuns` + `readResultsByRunId`
+- Хук `useFetch` расширен опцией `key` — при смене ключа состояние `data` синхронно обнуляется в render (паттерн «set state during render»), убирая фликер при переключении запросов
+- `RunSelector` форматирует runId в человекочитаемое `DD.MM.YYYY HH:MM:SS`; упавшие запуски (`hasResults: false`) показаны как disabled с тегом «ошибка»
+
+### Фаза 5.5: UI-рефакторинг — две страницы и FSD-чистка ✅
+
+UI разделён на две страницы с навигацией в шапке («Новый анализ» / «Выполненные анализы») и упорядочен под FSD:
+
+1. ~~`HeaderNav` виджет + `enum PageNames`; `AppLayout` принимает `headerActions` слотом~~ ✅
+2. ~~`HistoryPage` — самостоятельная страница (RunSelector + ResultsTable + CSV), без степпера; на «Новом анализе» селектор истории убран — показывается только текущий `pipeline.runId`~~ ✅
+3. ~~Disabled-логика хедера: обе кнопки disabled при не-OK Docker; «Выполненные» — также при отсутствии успешных запусков~~ ✅
+4. ~~Long-lived hooks (`useHealth`, `useRuns`, `usePipelineStatus`) подняты в `App` — переживают переключение страниц, polling идёт всегда~~ ✅
+5. ~~Lifted state: `currentStep`, `metric`, `currentPage` в `App`; server-derived state остаётся локальным и подгружается на mount страниц~~ ✅
+6. ~~Реструктура папок: `pages/ui/UploadPage/` и `pages/ui/HistoryPage/` со своими `index.ts`; `steps/` переехал в `UploadPage/`~~ ✅
+7. ~~Перенос компонентов в правильные слои: `MetricToggle`, `CsvExportButton` → `shared/ui/`; `RunSelector` → отдельный виджет~~ ✅
+8. ~~`formatValue` вынесен в `shared/lib/format/`~~ ✅
+9. ~~`ResultsTable` принимает `isLoading` и встроенно показывает скелетон в ячейках/заголовках — оболочка таблицы остаётся на месте, нет layout-jitter'а~~ ✅
+10. ~~`DockerCheck` стал «чистым» компонентом — health/loading/onRetry приходят пропсами; контейнер-логика в `App`~~ ✅
 
 ### Фаза 6: Electron
 

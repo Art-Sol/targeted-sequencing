@@ -1,57 +1,32 @@
 import { Result, Button, Spin, Typography, Card } from 'antd';
-import { useState, useEffect } from 'react';
-import { checkHealth } from '../../../shared/api/client';
+import type { ReactNode } from 'react';
 import type { HealthResponse } from '../../../shared/model/types';
 import classes from './DockerCheck.module.css';
 
 const { Paragraph, Link } = Typography;
 
 interface DockerCheckProps {
-  children: React.ReactNode;
+  health: HealthResponse | null;
+  loading: boolean;
+  onRetry: () => void;
+  children: ReactNode;
 }
 
 /**
- * Обёртка, которая проверяет Docker-окружение при старте приложения.
+ * Презентационный компонент: по health-объекту решает, показать инструкцию
+ * или пропустить дочерние элементы. Загрузку и retry владеет родитель.
  *
- * - Docker не установлен → экран с инструкцией по установке
- * - Docker не запущен    → экран с инструкцией по запуску
- * - Образ не загружен    → экран с сообщением (в Electron автозагрузка)
- * - Всё в порядке        → показываем основной интерфейс (children)
+ * - loading=true              → спиннер
+ * - health.docker=false       → инструкция «установите Docker»
+ * - health.daemon=false       → инструкция «запустите Docker»
+ * - health.image=false        → «образ пайплайна не найден»
+ * - всё в порядке             → children
  */
-export const DockerCheck = ({ children }: DockerCheckProps) => {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const check = async () => {
-    setLoading(true);
-    try {
-      const result = await checkHealth();
-      setHealth(result);
-    } catch {
-      setHealth({
-        status: 'error',
-        docker: false,
-        daemon: false,
-        image: false,
-        message: 'Сервер недоступен',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    check();
-  }, []);
-
+export const DockerCheck = ({ health, loading, onRetry, children }: DockerCheckProps) => {
   if (loading) {
     return (
       <div className={classes.container}>
-        <Spin
-          size="large"
-          tip="Проверка программного окружения..."
-          className={classes.spinner}
-        />
+        <Spin size="large" tip="Проверка программного окружения..." className={classes.spinner} />
       </div>
     );
   }
@@ -64,7 +39,7 @@ export const DockerCheck = ({ children }: DockerCheckProps) => {
           title="Docker не найден"
           subTitle="Для работы приложения необходим Docker"
           extra={[
-            <Button type="primary" key="retry" onClick={check}>
+            <Button type="primary" key="retry" onClick={onRetry}>
               Проверить снова
             </Button>,
           ]}
@@ -103,7 +78,7 @@ export const DockerCheck = ({ children }: DockerCheckProps) => {
           title="Docker не запущен"
           subTitle="Docker установлен, но движок Docker не активен"
           extra={[
-            <Button type="primary" key="retry" onClick={check}>
+            <Button type="primary" key="retry" onClick={onRetry}>
               Проверить снова
             </Button>,
           ]}
@@ -132,7 +107,7 @@ export const DockerCheck = ({ children }: DockerCheckProps) => {
           title="Docker-образ пайплайна не найден"
           subTitle="Образ targets-pipeline:0.1.0 не загружен"
           extra={[
-            <Button type="primary" key="retry" onClick={check}>
+            <Button type="primary" key="retry" onClick={onRetry}>
               Проверить снова
             </Button>,
           ]}

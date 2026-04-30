@@ -2,10 +2,10 @@ import { Card, Table, Typography, message, Flex, Alert, Tag } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { WarningOutlined } from '@ant-design/icons';
 import type { UploadRequestOption } from 'rc-upload/lib/interface';
-import { uploadReadsList } from '../../../../shared/api/client';
-import type { ReadsListEntry, UploadStatusResponse } from '../../../../shared/model/types';
-import { formatBytes } from '../../../../shared/lib/format/formatBytes';
-import { FileUpload } from '../../../../widgets';
+import { uploadReadsList } from '../../../../../shared/api/client';
+import type { ReadsListEntry, UploadStatusResponse } from '../../../../../shared/model/types';
+import { formatBytes } from '../../../../../shared/lib/format/formatBytes';
+import { FileUpload } from '../../../../../widgets';
 
 const { Text } = Typography;
 

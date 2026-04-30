@@ -146,8 +146,8 @@ export async function cleanUploads(): Promise<void> {
  * Проверяет окружение: установлен ли Docker, загружен ли образ пайплайна.
  * Вызывается при старте приложения.
  */
-export async function checkHealth(): Promise<HealthResponse> {
-  const response = await api.get('/api/health');
+export async function checkHealth(signal?: AbortSignal): Promise<HealthResponse> {
+  const response = await api.get('/api/health', { signal });
   return response.data;
 }
 

@@ -3,15 +3,15 @@ import { Card, Table, Alert, message, Flex } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { CheckCircleOutlined, WarningOutlined } from '@ant-design/icons';
 import type { UploadRequestOption } from 'rc-upload/lib/interface';
-import { uploadSingleFastq } from '../../../../shared/api/client';
+import { uploadSingleFastq } from '../../../../../shared/api/client';
 import type {
   UploadedFileInfo,
   UploadStatusResponse,
   ValidationResult,
   ReadsListEntry,
-} from '../../../../shared/model/types';
-import { formatBytes } from '../../../../shared/lib/format/formatBytes';
-import { FileUpload } from '../../../../widgets';
+} from '../../../../../shared/model/types';
+import { formatBytes } from '../../../../../shared/lib/format/formatBytes';
+import { FileUpload } from '../../../../../widgets';
 
 const fastqColumns: TableColumnsType<UploadedFileInfo> = [
   {

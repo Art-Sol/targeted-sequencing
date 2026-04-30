@@ -1,9 +1,9 @@
 import { Button } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
-import type { PipelineResults, MetricType } from '../../../shared/model/types';
-import { buildCsv } from '../../../shared/lib/results/buildCsv';
-import { buildResultsMatrix } from '../../../shared/lib/results/buildMatrix';
-import { downloadFile } from '../../../shared/lib/download';
+import type { PipelineResults, MetricType } from '../../model/types';
+import { buildCsv } from '../../lib/results/buildCsv';
+import { buildResultsMatrix } from '../../lib/results/buildMatrix';
+import { downloadFile } from '../../lib/download';
 
 // ============================================================
 // CsvExportButton — кнопка скачивания результатов в CSV

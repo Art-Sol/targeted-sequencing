@@ -1,11 +1,11 @@
 import { Flex, Alert, Collapse, Progress, Typography } from 'antd';
-import type { PipelineStatus } from '../../../shared/model/types';
-import classes from './PipelineControls.module.css';
+import type { PipelineStatus as PipelineStatusType } from '../../../shared/model/types';
+import classes from './PipelineStatus.module.css';
 
 const { Text } = Typography;
 
 // ============================================================
-// PipelineControls — визуализация состояния пайплайна
+// PipelineStatus — визуализация состояния пайплайна
 // ============================================================
 //
 // Ядро — круглый <Progress type="circle">. Внутри круга разный текст
@@ -18,8 +18,8 @@ const { Text } = Typography;
 // только обратная связь.
 // ============================================================
 
-interface PipelineControlsProps {
-  status: PipelineStatus;
+interface PipelineStatusProps {
+  status: PipelineStatusType;
   error?: string;
   /** Сколько образцов начато обработкой (для процента прогресса) */
   samplesProcessed?: number;
@@ -29,12 +29,12 @@ interface PipelineControlsProps {
 
 const CIRCLE_SIZE = 180;
 
-export const PipelineControls = ({
+export const PipelineStatus = ({
   status,
   error,
   samplesProcessed,
   totalSamples,
-}: PipelineControlsProps) => {
+}: PipelineStatusProps) => {
   const isIdle = status === 'idle';
   const isRunning = status === 'running';
   const isError = status === 'error';

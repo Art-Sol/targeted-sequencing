@@ -1,6 +1,6 @@
 import { Select, Tag } from 'antd';
 import type { RunInfo } from '../../../shared/model/types';
-import classes from './ResultsTable.module.css';
+import classes from './RunSelector.module.css';
 
 interface RunSelectorProps {
   runs: RunInfo[];

@@ -1,79 +1,57 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Typography, Layout, Flex, Button, Alert, message } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
-import { cleanUploads, getUploadStatus, runPipeline } from '../../shared/api/client';
+import { cleanUploads, getUploadStatus, runPipeline } from '../../../shared/api/client';
 import type {
   UploadStatusResponse,
   ValidationResult,
   ReadsListEntry,
   MetricType,
-} from '../../shared/model/types';
-import { STEPS } from '../module/consts';
-import { formatBytes } from '../../shared/lib/format/formatBytes';
+} from '../../../shared/model/types';
+import { STEPS } from '../../module/consts';
+import { formatBytes } from '../../../shared/lib/format/formatBytes';
 
-import classes from './UploadPage.module.css';
-import { Step } from '../module/types';
-import { Stepper, StepActions } from '../../widgets';
-import { CsvExportButton } from '../../widgets/ui/ResultsTable/CsvExportButton';
-import { usePipelineStatus } from '../../shared/hooks/usePipelineStatus';
-import { useResults } from '../../shared/hooks/useResults';
-import { useRuns } from '../../shared/hooks/useRuns';
+import classes from './NewAnalysisPage.module.css';
+import { Step } from '../../module/types';
+import { Stepper, StepActions } from '../../../widgets';
+import { CsvExportButton } from '../../../shared/ui/CsvExportButton/CsvExportButton';
+import { usePipelineStatus } from '../../../shared/hooks/usePipelineStatus';
+import { useResults } from '../../../shared/hooks/useResults';
 import { ReadsListStepContent, FastqStepContent, AnalysisStepContent } from './steps';
 
 const { Title, Text } = Typography;
 const { Content } = Layout;
 
-// ============================================================
-// UploadPage — корневая страница флоу загрузки → анализа → результатов
-// ============================================================
+interface NewAnalysisPageProps {
+  currentStep: number;
+  setCurrentStep: (next: number | ((prev: number) => number)) => void;
+  metric: MetricType;
+  setMetric: (metric: MetricType) => void;
+  pipeline: ReturnType<typeof usePipelineStatus>;
+}
 
-export const UploadPage = () => {
-  const [currentStep, setCurrentStep] = useState(0);
+export const NewAnalysisPage = ({
+  currentStep,
+  setCurrentStep,
+  metric,
+  setMetric,
+  pipeline,
+}: NewAnalysisPageProps) => {
   const [status, setStatus] = useState<UploadStatusResponse | null>(null);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [entries, setEntries] = useState<ReadsListEntry[]>([]);
   const [processing, setProcessing] = useState(false);
   const [cleanLoading, setCleanLoading] = useState(false);
   const [runLoading, setRunLoading] = useState(false);
-  const [metric, setMetric] = useState<MetricType>('mapped_reads');
-  const [selectedRunId, setSelectedRunId] = useState<string | undefined>();
-  const pipeline = usePipelineStatus();
-
-  const {
-    data: runs,
-    loading: runsLoading,
-    refetch: refetchRuns,
-  } = useRuns({ enabled: currentStep === 2 });
 
   const {
     data: results,
     loading: resultsLoading,
     error: resultsError,
   } = useResults({
-    runId: selectedRunId,
+    runId: pipeline.runId,
     enabled: pipeline.status === 'done',
   });
-
-  useEffect(() => {
-    if (selectedRunId === undefined && runs && runs.length > 0) {
-      const firstSuccessful = runs.find((r) => r.hasResults);
-      if (firstSuccessful) setSelectedRunId(firstSuccessful.runId);
-    }
-  }, [runs, selectedRunId]);
-
-  // Синхронно при transition running→done переключаемся на свежий runId
-  // прямо в рендере. Эффект здесь оставил бы кадр со старой таблицей —
-  // useEffect выполняется ПОСЛЕ paint'а, и пользователь успевает её увидеть.
-  // Паттерн «store info from previous render»: setState в render
-  // → React отбрасывает текущий render и перезапускает с обновлённым state.
-  const [storedPipelineStatus, setStoredPipelineStatus] = useState(pipeline.status);
-  if (storedPipelineStatus !== pipeline.status) {
-    setStoredPipelineStatus(pipeline.status);
-    if (storedPipelineStatus === 'running' && pipeline.status === 'done' && pipeline.runId) {
-      setSelectedRunId(pipeline.runId);
-      refetchRuns();
-    }
-  }
 
   // ------- Получение статуса загрузок с сервера -------
 
@@ -122,13 +100,8 @@ export const UploadPage = () => {
       setEntries([]);
       setCurrentStep(0);
       refreshStatus();
-      // Polling в usePipelineStatus активен только при 'running'. После clean
-      // сервер перевёл state в 'idle' — подтянуть свежий статус надо явно.
       pipeline.refresh();
     } catch (err) {
-      // Сервер отдаёт 409 если пайплайн работает → err.response.data.error
-      // (axios кладёт это в message если interceptor'ом развернуть; у нас
-      // err.message = обычное сообщение axios. Более надёжно — через response).
       const msg = err instanceof Error ? err.message : 'Не удалось очистить файлы';
       message.error(msg);
     } finally {
@@ -143,8 +116,6 @@ export const UploadPage = () => {
     try {
       await runPipeline();
       message.success('Анализ запущен');
-      // Быстро обновляем статус — иначе кнопка может проплёскнуть одно состояние
-      // между locaL loading и реальным 'running' с сервера.
       pipeline.refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Не удалось запустить анализ';
@@ -157,9 +128,6 @@ export const UploadPage = () => {
   const step = STEPS[currentStep] as Step;
 
   // ------- Рендер StepActions для текущего шага -------
-  //
-  // Для каждого шага свой конфиг: какие кнопки показывать, что именно
-  // делает «Далее», нужны ли custom-действия. Единый UI в StepActions.
 
   const cleanConfirm = {
     confirmTitle: 'Удалить файлы и начать заново?',
@@ -167,16 +135,12 @@ export const UploadPage = () => {
     cleanLabel: 'Удалить файлы и начать заново',
   };
 
-  // Есть ли что удалять: либо загружен list_reads.txt, либо хоть один FASTQ.
-  // Пока status ещё не подгружен с сервера (null) — считаем что удалять нечего,
-  // кнопка будет disabled; после первого refreshStatus пересчитается.
   const hasFilesToDelete =
     status?.readsList !== null && status?.readsList !== undefined
       ? true
       : (status?.fastqFiles.length ?? 0) > 0;
 
   const renderStepActions = () => {
-    // Шаг 1 (list_reads.txt): пока не загружено — никаких кнопок.
     if (currentStep === 0) {
       return (
         <StepActions
@@ -189,7 +153,6 @@ export const UploadPage = () => {
       );
     }
 
-    // Шаг 2 (FASTQ): Назад всегда, Далее — только когда валидация прошла.
     if (currentStep === 1) {
       return (
         <StepActions
@@ -203,10 +166,6 @@ export const UploadPage = () => {
       );
     }
 
-    // Шаг 3 (Таблица): кнопки видны всегда, но во время работы пайплайна
-    // полностью disabled — нельзя ни вернуться, ни очистить, ни запустить
-    // повторно. Так пользователь видит, что действия существуют, но сейчас
-    // недоступны (вместо «куда-то всё пропало»).
     if (currentStep === 2) {
       const isRunning = pipeline.status === 'running';
       return (
@@ -227,11 +186,7 @@ export const UploadPage = () => {
             {pipeline.status === 'done' ? 'Запустить ещё раз' : 'Запустить анализ'}
           </Button>
           {pipeline.status === 'done' && results && (
-            <CsvExportButton
-              results={results}
-              metric={metric}
-              runId={selectedRunId ?? pipeline.runId}
-            />
+            <CsvExportButton results={results} metric={metric} runId={pipeline.runId} />
           )}
         </StepActions>
       );
@@ -297,10 +252,6 @@ export const UploadPage = () => {
             resultsError={resultsError}
             metric={metric}
             onMetricChange={setMetric}
-            runs={runs}
-            runsLoading={runsLoading}
-            selectedRunId={selectedRunId}
-            onSelectedRunIdChange={setSelectedRunId}
           />
         )}
       </Flex>

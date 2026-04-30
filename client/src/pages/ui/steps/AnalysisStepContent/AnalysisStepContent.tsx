@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { Flex, Spin, Alert, message } from 'antd';
-import { PipelineControls, ResultsTable } from '../../../../widgets';
+import { PipelineControls, ResultsTable, RunSelector } from '../../../../widgets';
 import type {
   PipelineResults,
   PipelineStatus,
   MetricType,
+  RunInfo,
 } from '../../../../shared/model/types';
 
 // ============================================================
@@ -30,6 +31,11 @@ interface AnalysisStepContentProps {
    */
   metric: MetricType;
   onMetricChange: (metric: MetricType) => void;
+  /** Список запусков для селектора истории. */
+  runs: RunInfo[] | null;
+  runsLoading: boolean;
+  selectedRunId?: string;
+  onSelectedRunIdChange: (runId: string) => void;
 }
 
 export const AnalysisStepContent = ({
@@ -42,6 +48,10 @@ export const AnalysisStepContent = ({
   resultsError,
   metric,
   onMetricChange,
+  runs,
+  runsLoading,
+  selectedRunId,
+  onSelectedRunIdChange,
 }: AnalysisStepContentProps) => {
   const prevStatusRef = useRef<PipelineStatus | null>(null);
   useEffect(() => {
@@ -67,6 +77,14 @@ export const AnalysisStepContent = ({
 
       {pipelineStatus === 'done' && (
         <>
+          {runs && runs.length > 0 && (
+            <RunSelector
+              runs={runs}
+              value={selectedRunId}
+              onChange={onSelectedRunIdChange}
+              loading={runsLoading}
+            />
+          )}
           {resultsLoading && <Spin tip="Загрузка результатов..." />}
           {resultsError && (
             <Alert

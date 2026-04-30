@@ -13,5 +13,6 @@ export type {
   UploadStatusResponse,
   ReadsListEntry,
   ValidationResult,
+  RunInfo,
   ApiError,
 } from 'shared/types';

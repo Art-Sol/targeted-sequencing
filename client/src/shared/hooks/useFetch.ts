@@ -19,6 +19,11 @@ export interface UseFetchOptions {
    * Переход false→true триггерит загрузку автоматически.
    */
   enabled?: boolean;
+  /**
+   * При изменении значения хук автоматически перезапускает запрос
+   * (как `key` в SWR / `queryKey` в react-query). undefined → ничего не меняет.
+   */
+  key?: string | number | null;
 }
 
 export interface UseFetchReturn<T> {
@@ -51,18 +56,23 @@ export function useFetch<T>(
   fetcher: (signal: AbortSignal) => Promise<T>,
   options: UseFetchOptions = {},
 ): UseFetchReturn<T> {
-  const { enabled = true } = options;
+  const { enabled = true, key } = options;
 
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState<boolean>(enabled);
   const [error, setError] = useState<string | null>(null);
   // Счётчик-триггер для refetch: инкремент → useEffect перезапускается.
   const [trigger, setTrigger] = useState(0);
-
-  // «Latest ref»-паттерн: держим актуальный fetcher в ref,
-  // чтобы не класть его в deps useEffect. Иначе любой родитель,
-  // не обернувший fetcher в useCallback, вызывал бы бесконечный цикл
+  const [storedKey, setStoredKey] = useState<typeof key>(key);
   const fetcherRef = useRef(fetcher);
+
+  if (storedKey !== key) {
+    setStoredKey(key);
+    setData(null);
+    setError(null);
+    setLoading(enabled);
+  }
+
   useEffect(() => {
     fetcherRef.current = fetcher;
   });
@@ -103,7 +113,7 @@ export function useFetch<T>(
     // trigger (refetch), при изменении enabled. В любом из случаев —
     // отменяем in-flight запрос, чтобы он не пытался обновить state.
     return () => controller.abort();
-  }, [trigger, enabled]);
+  }, [trigger, enabled, key]);
 
   const refetch = useCallback(() => {
     setTrigger((t) => t + 1);

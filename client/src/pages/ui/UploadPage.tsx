@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Typography, Layout, Flex, Button, message } from 'antd';
+import { Typography, Layout, Flex, Button, Alert, message } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { cleanUploads, getUploadStatus, runPipeline } from '../../shared/api/client';
 import type {
@@ -9,6 +9,7 @@ import type {
   MetricType,
 } from '../../shared/model/types';
 import { STEPS } from '../module/consts';
+import { formatBytes } from '../../shared/lib/format/formatBytes';
 
 import classes from './UploadPage.module.css';
 import { Step } from '../module/types';
@@ -16,6 +17,7 @@ import { Stepper, StepActions } from '../../widgets';
 import { CsvExportButton } from '../../widgets/ui/ResultsTable/CsvExportButton';
 import { usePipelineStatus } from '../../shared/hooks/usePipelineStatus';
 import { useResults } from '../../shared/hooks/useResults';
+import { useRuns } from '../../shared/hooks/useRuns';
 import { ReadsListStepContent, FastqStepContent, AnalysisStepContent } from './steps';
 
 const { Title, Text } = Typography;
@@ -34,13 +36,44 @@ export const UploadPage = () => {
   const [cleanLoading, setCleanLoading] = useState(false);
   const [runLoading, setRunLoading] = useState(false);
   const [metric, setMetric] = useState<MetricType>('mapped_reads');
+  const [selectedRunId, setSelectedRunId] = useState<string | undefined>();
   const pipeline = usePipelineStatus();
+
+  const {
+    data: runs,
+    loading: runsLoading,
+    refetch: refetchRuns,
+  } = useRuns({ enabled: currentStep === 2 });
 
   const {
     data: results,
     loading: resultsLoading,
     error: resultsError,
-  } = useResults({ enabled: pipeline.status === 'done' });
+  } = useResults({
+    runId: selectedRunId,
+    enabled: pipeline.status === 'done',
+  });
+
+  useEffect(() => {
+    if (selectedRunId === undefined && runs && runs.length > 0) {
+      const firstSuccessful = runs.find((r) => r.hasResults);
+      if (firstSuccessful) setSelectedRunId(firstSuccessful.runId);
+    }
+  }, [runs, selectedRunId]);
+
+  // Синхронно при transition running→done переключаемся на свежий runId
+  // прямо в рендере. Эффект здесь оставил бы кадр со старой таблицей —
+  // useEffect выполняется ПОСЛЕ paint'а, и пользователь успевает её увидеть.
+  // Паттерн «store info from previous render»: setState в render
+  // → React отбрасывает текущий render и перезапускает с обновлённым state.
+  const [storedPipelineStatus, setStoredPipelineStatus] = useState(pipeline.status);
+  if (storedPipelineStatus !== pipeline.status) {
+    setStoredPipelineStatus(pipeline.status);
+    if (storedPipelineStatus === 'running' && pipeline.status === 'done' && pipeline.runId) {
+      setSelectedRunId(pipeline.runId);
+      refetchRuns();
+    }
+  }
 
   // ------- Получение статуса загрузок с сервера -------
 
@@ -194,7 +227,11 @@ export const UploadPage = () => {
             {pipeline.status === 'done' ? 'Запустить ещё раз' : 'Запустить анализ'}
           </Button>
           {pipeline.status === 'done' && results && (
-            <CsvExportButton results={results} metric={metric} runId={pipeline.runId} />
+            <CsvExportButton
+              results={results}
+              metric={metric}
+              runId={selectedRunId ?? pipeline.runId}
+            />
           )}
         </StepActions>
       );
@@ -219,8 +256,15 @@ export const UploadPage = () => {
         <Title level={4}>{step.stepTitle}</Title>
         <Text type="secondary">{step.stepDescription}</Text>
 
-        {/* Шаг 3: StepActions ВЫШЕ контента (чтобы быть над таблицей).
-            На остальных шагах — ниже контента, как кнопка-подвал. */}
+        {status?.diskWarning && (
+          <Alert
+            type="warning"
+            showIcon
+            message="Мало свободного места на диске"
+            description={`Осталось ${formatBytes(status.diskFreeBytes)}. Рекомендуем очистить место для
+                загрузки новых файлов.`}
+          />
+        )}
         {stepActions}
 
         {currentStep === 0 && (
@@ -253,6 +297,10 @@ export const UploadPage = () => {
             resultsError={resultsError}
             metric={metric}
             onMetricChange={setMetric}
+            runs={runs}
+            runsLoading={runsLoading}
+            selectedRunId={selectedRunId}
+            onSelectedRunIdChange={setSelectedRunId}
           />
         )}
       </Flex>

@@ -7,6 +7,7 @@ import type {
   PipelineStatusResponse,
   HealthResponse,
   PipelineResults,
+  RunInfo,
   ApiError,
 } from '../model/types';
 
@@ -192,5 +193,30 @@ export async function getPipelineStatus(signal?: AbortSignal): Promise<PipelineS
  */
 export async function getResults(signal?: AbortSignal): Promise<PipelineResults> {
   const response = await api.get('/api/results', { signal });
+  return response.data;
+}
+
+/**
+ * Получает список всех запусков пайплайна (история), новые сверху.
+ * Включает упавшие запуски — у них `hasResults === false`.
+ */
+export async function getRuns(signal?: AbortSignal): Promise<RunInfo[]> {
+  const response = await api.get('/api/results/runs', { signal });
+  return response.data;
+}
+
+/**
+ * Получает результаты конкретного запуска по runId.
+ *
+ * Возможные ошибки:
+ * - 400 — невалидный формат runId
+ * - 404 — папки запуска нет, либо results.json в ней нет
+ * - 500 — файл повреждён / не прошёл валидацию схемы
+ */
+export async function getResultsByRunId(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<PipelineResults> {
+  const response = await api.get(`/api/results/${encodeURIComponent(runId)}`, { signal });
   return response.data;
 }

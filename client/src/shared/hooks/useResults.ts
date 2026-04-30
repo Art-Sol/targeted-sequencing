@@ -1,41 +1,31 @@
 import axios from 'axios';
-import { getResults } from '../api/client';
+import { getResults, getResultsByRunId } from '../api/client';
 import type { PipelineResults } from '../model/types';
 import { useFetch, type UseFetchOptions, type UseFetchReturn } from './useFetch';
 
 // ============================================================
-// useResults — результаты пайплайна
+// useResults — результаты пайплайна (latest или конкретный runId)
 // ============================================================
 
-/**
- * Делает запрос к /api/results; при 404 возвращает null вместо бросания ошибки.
- *
- * Вынесена на уровень модуля (а не inline в хук) — это даёт стабильную
- * ссылку на функцию, что важно для useFetch и React-линтинга.
- */
-async function fetchResultsOrNull(signal: AbortSignal): Promise<PipelineResults | null> {
-  try {
-    return await getResults(signal);
-  } catch (err) {
-    if (axios.isAxiosError(err) && err.response?.status === 404) {
-      return null;
-    }
-    throw err;
-  }
+export interface UseResultsOptions extends Pick<UseFetchOptions, 'enabled'> {
+  /** Если задан — грузим конкретный запуск; иначе — последний. */
+  runId?: string;
 }
 
-/**
- * Хук загружает результаты последнего запуска пайплайна.
- *
- * Состояния:
- * - loading=true — выполняется запрос
- * - data=null, error=null — запусков ещё не было (404 от сервера)
- * - data=PipelineResults — есть результаты
- * - error=строка — ошибка запроса (500, сеть и т.п.)
- *
- * @param options.enabled — если false, хук не делает запрос (удобно когда пайплайн
- *                          ещё не завершился, данных ждать рано)
- */
-export function useResults(options: UseFetchOptions = {}): UseFetchReturn<PipelineResults | null> {
-  return useFetch(fetchResultsOrNull, options);
+/** Хук загружает результаты пайплайна; при 404 возвращает null вместо ошибки. */
+export function useResults({
+  runId,
+  enabled,
+}: UseResultsOptions = {}): UseFetchReturn<PipelineResults | null> {
+  return useFetch(
+    async (signal) => {
+      try {
+        return runId ? await getResultsByRunId(runId, signal) : await getResults(signal);
+      } catch (err) {
+        if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+        throw err;
+      }
+    },
+    { enabled, key: runId ?? null },
+  );
 }

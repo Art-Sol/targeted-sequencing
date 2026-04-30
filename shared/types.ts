@@ -79,3 +79,15 @@ export interface ApiError {
   error: string;
   details?: string;
 }
+
+// ============================================================
+// История запусков
+// ============================================================
+
+/** Один запуск пайплайна в истории. */
+export interface RunInfo {
+  /** ID запуска в формате YYYY-MM-DD_HHmmss (см. dockerService.formatRunId). */
+  runId: string;
+  /** true, если на диске есть results.json — запуск завершился успешно. */
+  hasResults: boolean;
+}

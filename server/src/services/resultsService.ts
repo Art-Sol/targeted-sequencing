@@ -1,54 +1,97 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PipelineResultsSchema, type PipelineResults } from 'shared/schemas/pipelineResults';
+import type { RunInfo } from 'shared/types';
 import { OUTPUT_DIR } from '../consts.js';
-import { NotFoundError } from '../errors.js';
+import { BadRequestError, NotFoundError } from '../errors.js';
 
 // ============================================================
-// Чтение результатов пайплайна
+// Чтение результатов пайплайна и истории запусков
 // ============================================================
 
 /**
- * Находит ID самого свежего запуска в pipeline-workdir/output/.
+ * Регекс «валидный runId» (YYYY-MM-DD_HHmmss).
  *
- * run_id формируется в dockerService как YYYY-MM-DD_HHmmss
- * @throws NotFoundError если папка output/ пуста или отсутствует.
+ * Зачем строго: runId приходит из URL (`GET /api/results/:runId`), и мы
+ * подставляем его в путь к файлу. Без проверки злоумышленник мог бы
+ * передать `../../etc/passwd` и прочитать произвольный файл сервера
+ * (path traversal). Регекс гарантирует, что внутри только цифры
+ * и единственный «-»/«_» в фиксированных позициях.
  */
-async function getLatestRunId(): Promise<string> {
+const RUN_ID_REGEX = /^\d{4}-\d{2}-\d{2}_\d{6}$/;
+
+// ============================================================
+// Внутренние помощники
+// ============================================================
+
+/**
+ * Возвращает отсортированный по возрастанию список валидных runId-папок
+ * в `pipeline-workdir/output/`.
+ *
+ * Невалидные имена и не-папки фильтруются — это защищает от мусора,
+ * случайно положенного руками (.DS_Store на macOS, временные файлы и т.п.).
+ */
+async function listRunIds(): Promise<string[]> {
   let entries;
   try {
-    // withFileTypes: true — возвращает массив Dirent-объектов,
-    // у которых есть метод isDirectory(). Без этого пришлось бы
-    // делать отдельный fs.stat() на каждый элемент.
     entries = await fs.readdir(OUTPUT_DIR, { withFileTypes: true });
   } catch {
-    // Папки output/ ещё не существует — значит пайплайн ни разу не запускался
-    throw new NotFoundError('Результаты не найдены. Сначала запустите анализ.');
+    // Папки output/ ещё не существует — значит запусков не было.
+    return [];
   }
 
-  const runIds = entries
-    .filter((entry) => entry.isDirectory())
+  return entries
+    .filter((entry) => entry.isDirectory() && RUN_ID_REGEX.test(entry.name))
     .map((entry) => entry.name)
     .sort();
+}
 
-  if (runIds.length === 0) {
-    throw new NotFoundError('Результаты не найдены. Сначала запустите анализ.');
+/** Проверяет существование файла без бросания ошибки. */
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
   }
+}
 
-  return runIds[runIds.length - 1];
+// ============================================================
+// Публичные функции
+// ============================================================
+
+/**
+ * Возвращает список всех запусков в порядке «самый свежий первым».
+ * Включает и упавшие запуски — у них `hasResults === false`. Решение
+ * «показывать ли упавшие в UI» — на стороне клиента.
+ */
+export async function listRuns(): Promise<RunInfo[]> {
+  const ids = await listRunIds();
+  // ids отсортирован по возрастанию (старый → свежий). Нам в UI удобнее
+  // обратный порядок.
+  const reversed = [...ids].reverse();
+
+  return Promise.all(
+    reversed.map(async (runId) => ({
+      runId,
+      hasResults: await fileExists(path.join(OUTPUT_DIR, runId, 'results.json')),
+    })),
+  );
 }
 
 /**
- * Читает и валидирует results.json последнего завершённого запуска.
+ * Читает и валидирует results.json для конкретного runId.
  *
  * Возможные ошибки:
- * - 404 (NotFoundError): папка output/ пуста — пайплайн ни разу не запускался
- * - 404 (NotFoundError): папка запуска есть, но results.json в ней нет
- * - 500 (Error → errorHandler): results.json повреждён (невалидный JSON-синтаксис)
- * - 500 (Error → errorHandler): results.json распарсился, но структура не соответствует схеме
+ * - 400 (BadRequestError): runId не соответствует формату YYYY-MM-DD_HHmmss
+ * - 404 (NotFoundError): папки запуска нет, либо results.json в ней нет
+ * - 500 (Error → errorHandler): JSON повреждён или не соответствует схеме
  */
-export async function getLatestResults(): Promise<PipelineResults> {
-  const runId = await getLatestRunId();
+export async function readResultsByRunId(runId: string): Promise<PipelineResults> {
+  if (!RUN_ID_REGEX.test(runId)) {
+    throw new BadRequestError(`Невалидный runId: "${runId}".`);
+  }
+
   const resultsPath = path.join(OUTPUT_DIR, runId, 'results.json');
 
   let content: string;
@@ -70,12 +113,9 @@ export async function getLatestResults(): Promise<PipelineResults> {
     throw new Error(`results.json повреждён (невалидный JSON): ${detail}`);
   }
 
-  // 2) Структурная валидация через Zod. Гарантирует, что все поля
-  //    PipelineResults реально на месте и имеют правильные типы.
+  // 2) Структурная валидация через Zod.
   const validated = PipelineResultsSchema.safeParse(rawData);
   if (!validated.success) {
-    // ZodError.issues — массив проблем: { path: [...], message: '...' }.
-    // path — путь к проблемному полю, например ['samples', 0, 'determinants', 2, 'rpkm'].
     const summary = validated.error.issues
       .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
       .join('; ');
@@ -83,4 +123,20 @@ export async function getLatestResults(): Promise<PipelineResults> {
   }
 
   return validated.data;
+}
+
+/**
+ * Возвращает results.json самого свежего запуска.
+ *
+ * @throws NotFoundError если запусков нет вообще
+ *         (для упавшего последнего запуска бросает «файл не найден» —
+ *          это симптом, что пайплайн крэшнулся; поверх этого фронт
+ *          отдельно показывает state.error из dockerService).
+ */
+export async function getLatestResults(): Promise<PipelineResults> {
+  const ids = await listRunIds();
+  if (ids.length === 0) {
+    throw new NotFoundError('Результаты не найдены. Сначала запустите анализ.');
+  }
+  return readResultsByRunId(ids[ids.length - 1]);
 }

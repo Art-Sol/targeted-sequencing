@@ -177,7 +177,7 @@ export const NewAnalysisPage = ({
           {...cleanConfirm}
         >
           <Button
-            type={pipeline.status === 'done' ? 'default' : 'primary'}
+            type={pipeline.status === 'done' && !resultsError ? 'default' : 'primary'}
             icon={<PlayCircleOutlined />}
             loading={runLoading || isRunning}
             disabled={runLoading || isRunning}

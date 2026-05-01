@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Typography, Layout, Flex, Button, Spin, Alert } from 'antd';
+import { Typography, Layout, Flex, Button, Spin, Alert, message } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
 import type { MetricType, RunInfo } from '../../../shared/model/types';
 import { useResults } from '../../../shared/hooks/useResults';
+import { deleteRun, deleteAllRuns } from '../../../shared/api/client';
 import { ResultsTable, RunSelector } from '../../../widgets';
 import { CsvExportButton } from '../../../shared/ui/CsvExportButton/CsvExportButton';
 
@@ -17,8 +18,7 @@ interface HistoryPageProps {
   metric: MetricType;
   onMetricChange: (metric: MetricType) => void;
   onNavigateToNew: () => void;
-  onDeleteRun: (runId: string) => Promise<void>;
-  onDeleteAllRuns: () => Promise<void>;
+  refetchRuns: () => void;
 }
 
 export const HistoryPage = ({
@@ -27,10 +27,31 @@ export const HistoryPage = ({
   metric,
   onMetricChange,
   onNavigateToNew,
-  onDeleteRun,
-  onDeleteAllRuns,
+  refetchRuns,
 }: HistoryPageProps) => {
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>();
+
+  const handleDeleteRun = async (runId: string) => {
+    try {
+      await deleteRun(runId);
+      message.success('Запуск удалён');
+      refetchRuns();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Не удалось удалить запуск';
+      message.error(msg);
+    }
+  };
+
+  const handleDeleteAllRuns = async () => {
+    try {
+      await deleteAllRuns();
+      message.success('История запусков очищена');
+      refetchRuns();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Не удалось очистить историю';
+      message.error(msg);
+    }
+  };
 
   const {
     data: results,
@@ -68,7 +89,21 @@ export const HistoryPage = ({
   if ((runs && runs.length === 0) || !runs || (!results && !resultsLoading)) {
     return (
       <Flex justify="center" align="center" flex={1}>
-        <Alert type="info" message="Нет завершённых анализов" />
+        <Alert
+          className={classes.alert}
+          type="info"
+          message="Нет завершённых анализов"
+          action={
+            <Button
+              type="primary"
+              size="middle"
+              icon={<PlayCircleOutlined />}
+              onClick={onNavigateToNew}
+            >
+              Запустить новый анализ
+            </Button>
+          }
+        />
       </Flex>
     );
   }
@@ -100,8 +135,8 @@ export const HistoryPage = ({
               value={selectedRunId}
               onChange={setSelectedRunId}
               loading={runsLoading}
-              onDeleteRun={onDeleteRun}
-              onDeleteAll={onDeleteAllRuns}
+              onDeleteRun={handleDeleteRun}
+              onDeleteAll={handleDeleteAllRuns}
             />
           </Flex>
         </Flex>

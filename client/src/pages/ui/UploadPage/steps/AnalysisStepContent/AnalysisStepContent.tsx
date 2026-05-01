@@ -66,15 +66,17 @@ export const AnalysisStepContent = ({
             <Alert
               type="error"
               message="Не удалось загрузить результаты"
-              description={resultsError}
+              description={`${resultsError} Возможно анализ был удален, запустите анализ еще раз`}
             />
           )}
-          <ResultsTable
-            isLoading={resultsLoading}
-            results={results ?? undefined}
-            metric={metric}
-            onMetricChange={onMetricChange}
-          />
+          {!resultsError && (
+            <ResultsTable
+              isLoading={resultsLoading}
+              results={results ?? undefined}
+              metric={metric}
+              onMetricChange={onMetricChange}
+            />
+          )}
         </>
       )}
     </Flex>

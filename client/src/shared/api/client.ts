@@ -220,3 +220,25 @@ export async function getResultsByRunId(
   const response = await api.get(`/api/results/${encodeURIComponent(runId)}`, { signal });
   return response.data;
 }
+
+/**
+ * Удаляет конкретный запуск из истории.
+ *
+ * Возможные ошибки:
+ * - 400 — невалидный runId
+ * - 404 — папки запуска нет
+ * - 409 — этот runId сейчас выполняется
+ */
+export async function deleteRun(runId: string, signal?: AbortSignal): Promise<void> {
+  await api.delete(`/api/results/${encodeURIComponent(runId)}`, { signal });
+}
+
+/**
+ * Удаляет всю историю запусков.
+ *
+ * Возможные ошибки:
+ * - 409 — пайплайн в данный момент работает
+ */
+export async function deleteAllRuns(signal?: AbortSignal): Promise<void> {
+  await api.delete('/api/results', { signal });
+}

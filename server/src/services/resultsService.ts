@@ -140,3 +140,48 @@ export async function getLatestResults(): Promise<PipelineResults> {
   }
   return readResultsByRunId(ids[ids.length - 1]);
 }
+
+/**
+ * Удаляет папку конкретного запуска целиком.
+ *
+ * Возможные ошибки:
+ * - 400 (BadRequestError): runId не соответствует формату
+ * - 404 (NotFoundError): папки запуска нет
+ *
+ * Ответственность за «нельзя удалять running-запуск» лежит на роуте —
+ * сервис не знает про docker-state и пайплайны.
+ */
+export async function deleteRun(runId: string): Promise<void> {
+  if (!RUN_ID_REGEX.test(runId)) {
+    throw new BadRequestError(`Невалидный runId: "${runId}".`);
+  }
+
+  const runPath = path.join(OUTPUT_DIR, runId);
+  try {
+    await fs.access(runPath);
+  } catch {
+    throw new NotFoundError(`Запуск ${runId} не найден.`);
+  }
+
+  // recursive: true — рекурсивно сносит подпапки и файлы.
+  // force: true — не падает на разовых ENOENT (защита от гонок при
+  // параллельных DELETE-запросах: два клиента одновременно могут
+  // нажать удаление, второй увидит пустоту и не должен ронять с EEXIST).
+  await fs.rm(runPath, { recursive: true, force: true });
+}
+
+/**
+ * Удаляет все runId-папки из output/. Папки и файлы, которые не
+ * соответствуют RUN_ID_REGEX, не трогает — это защита от случайного
+ * сноса вручную положенных бэкапов или служебных директорий.
+ *
+ * Если output/ ещё не существует — no-op (нечего удалять).
+ *
+ * Ответственность за «нельзя удалять во время running» — на роуте.
+ */
+export async function deleteAllRuns(): Promise<void> {
+  const ids = await listRunIds();
+  await Promise.all(
+    ids.map((runId) => fs.rm(path.join(OUTPUT_DIR, runId), { recursive: true, force: true })),
+  );
+}

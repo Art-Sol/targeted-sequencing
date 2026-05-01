@@ -381,6 +381,38 @@ UI разделён на две страницы с навигацией в ша
 9. ~~`ResultsTable` принимает `isLoading` и встроенно показывает скелетон в ячейках/заголовках — оболочка таблицы остаётся на месте, нет layout-jitter'а~~ ✅
 10. ~~`DockerCheck` стал «чистым» компонентом — health/loading/onRetry приходят пропсами; контейнер-логика в `App`~~ ✅
 
+### Фаза 5.6: Удаление запусков из истории ✅
+
+Освобождение места на диске через UI: удаление одного или всех запусков.
+
+**Бэкенд:**
+
+1. ~~`resultsService.deleteRun(runId)` — валидация через `RUN_ID_REGEX`, `fs.rm(..., { recursive: true, force: true })`; `BadRequestError` / `NotFoundError`~~ ✅
+2. ~~`resultsService.deleteAllRuns()` — только подпапки, соответствующие `RUN_ID_REGEX` (мусор не трогаем)~~ ✅
+3. ~~`dockerService.isRunningRunId(runId)` + `isPipelineRunning()` — хелперы для 409~~ ✅
+4. ~~`DELETE /api/results/:runId` — 400 / 409 / 404 / 204~~ ✅
+5. ~~`DELETE /api/results` — 409 / 204~~ ✅
+
+**Клиентский API:**
+
+6. ~~`deleteRun(runId, signal?)` и `deleteAllRuns(signal?)` в `shared/api/client.ts`~~ ✅
+
+**RunSelector — встроенное управление:**
+
+7. ~~Per-item-удаление: иконка-корзина в каждой опции через `optionRender` (НЕ `label`!) — кнопка показывается только в раскрытом dropdown, не в свёрнутом Select. Клик открывает `Modal.confirm`. `stopPropagation` на `onClick` + `onMouseDown`~~ ✅
+8. ~~«Удалить все» — кнопка в подвале dropdown через `popupRender`. Открывает `Modal.confirm`~~ ✅
+9. ~~Опциональные пропсы `onDeleteRun?` / `onDeleteAll?` — без них UI не рендерится (back-compat)~~ ✅
+
+**App + HistoryPage:**
+
+10. ~~App владеет колбэками — вызов API + `refetchRuns()` + `message.success/error`~~ ✅
+11. ~~Авто-сброс `selectedRunId` через отдельный `useEffect` — если выбранный исчез из `runs`, сброс → effect авто-выбора подхватит следующий~~ ✅
+
+**Решения, отступившие от плана:**
+
+- `Modal.confirm` вместо `Popconfirm` — портал-modal надёжнее работает «поверх» dropdown'a Select'a, без z-index/click-outside проблем
+- В RunSelector использован `popupRender` вместо `dropdownRender` (последний deprecated в AntD 5.7+) и `optionRender` для разделения dropdown-вида и свёрнутого вида
+
 ### Фаза 6: Electron
 
 1. Добавить electron/ с main.ts и preload.ts

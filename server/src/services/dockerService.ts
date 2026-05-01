@@ -60,6 +60,16 @@ export function getPipelineStatus() {
   };
 }
 
+/** true если пайплайн сейчас работает и runId совпадает с переданным. */
+export function isRunningRunId(runId: string): boolean {
+  return state.status === 'running' && state.runId === runId;
+}
+
+/** true если пайплайн сейчас работает (любой runId). */
+export function isPipelineRunning(): boolean {
+  return state.status === 'running';
+}
+
 /**
  * Сбрасывает state в initial ('idle').
  *

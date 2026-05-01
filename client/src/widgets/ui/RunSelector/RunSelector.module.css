@@ -5,3 +5,19 @@
 .runErrorTag {
   margin-left: 8px;
 }
+
+.optionLabel {
+  width: 100%;
+}
+
+.divider {
+  margin: 4px 0;
+}
+
+.dropdownFooter {
+  padding: 0 4px 4px;
+}
+
+.deleteIcon {
+  color: #ff4d4f; /* AntD --ant-color-error */
+}

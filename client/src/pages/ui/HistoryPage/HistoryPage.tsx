@@ -17,6 +17,8 @@ interface HistoryPageProps {
   metric: MetricType;
   onMetricChange: (metric: MetricType) => void;
   onNavigateToNew: () => void;
+  onDeleteRun: (runId: string) => Promise<void>;
+  onDeleteAllRuns: () => Promise<void>;
 }
 
 export const HistoryPage = ({
@@ -25,6 +27,8 @@ export const HistoryPage = ({
   metric,
   onMetricChange,
   onNavigateToNew,
+  onDeleteRun,
+  onDeleteAllRuns,
 }: HistoryPageProps) => {
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>();
 
@@ -37,10 +41,19 @@ export const HistoryPage = ({
     enabled: selectedRunId !== undefined,
   });
 
+  // Авто-выбор: при первой загрузке списка — самый свежий успешный запуск.
   useEffect(() => {
     if (selectedRunId === undefined && runs && runs.length > 0) {
       const firstSuccessful = runs.find((r) => r.hasResults);
       if (firstSuccessful) setSelectedRunId(firstSuccessful.runId);
+    }
+  }, [runs, selectedRunId]);
+
+  // Авто-сброс: если выбранный runId исчез из списка (был удалён) —
+  // сбросить selectedRunId, чтобы effect выше выбрал следующий доступный.
+  useEffect(() => {
+    if (selectedRunId !== undefined && runs && !runs.some((r) => r.runId === selectedRunId)) {
+      setSelectedRunId(undefined);
     }
   }, [runs, selectedRunId]);
 
@@ -87,6 +100,8 @@ export const HistoryPage = ({
               value={selectedRunId}
               onChange={setSelectedRunId}
               loading={runsLoading}
+              onDeleteRun={onDeleteRun}
+              onDeleteAll={onDeleteAllRuns}
             />
           </Flex>
         </Flex>

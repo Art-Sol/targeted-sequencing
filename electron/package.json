@@ -1,0 +1,17 @@
+{
+  "name": "electron-app",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc && node scripts/launch.cjs",
+    "start": "node scripts/launch.cjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^5.7.3"
+  }
+}

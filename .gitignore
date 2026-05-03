@@ -4,3 +4,10 @@ pipeline-workdir/
 *.log
 .env
 .DS_Store
+
+# Bundled Docker image — собирается локально через `docker save`,
+# в репозиторий не коммитится. Поддерживаем оба формата:
+# - .tar (uncompressed, ~50 MB)
+# - .tar.gz (gzip-compressed, ~30-40 MB)
+electron/resources/*.tar
+electron/resources/*.tar.gz

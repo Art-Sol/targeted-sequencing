@@ -57,6 +57,7 @@ export const HistoryPage = ({
     data: results,
     loading: resultsLoading,
     error: resultsError,
+    hasLoaded: resultsHasLoaded,
   } = useResults({
     runId: selectedRunId,
     enabled: selectedRunId !== undefined,
@@ -86,7 +87,16 @@ export const HistoryPage = ({
     );
   }
 
-  if ((runs && runs.length === 0) || !runs || (!results && !resultsLoading)) {
+  // «Нет анализов» показываем только если:
+  //  - runs уже загрузились и оказались пустыми, ИЛИ
+  //  - конкретный runId уже грузился (hasLoaded=true), но результат null (404 от сервера)
+  // Без hasLoaded мы бы триггерились на initial state useResults (selectedRunId undefined,
+  // enabled=false → loading=false, results=null) и показывали ложный alert.
+  if (
+    !runs ||
+    runs.length === 0 ||
+    (resultsHasLoaded && !results && !resultsError)
+  ) {
     return (
       <Flex justify="center" align="center" flex={1}>
         <Alert

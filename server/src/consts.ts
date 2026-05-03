@@ -24,6 +24,9 @@ export const DOCKER_IMAGE = 'targets-pipeline:0.1.0';
 /** Корневая папка проекта (на 2 уровня выше server/src/) */
 export const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
+/** Папка с собранным клиентом — в Electron-prod Express отдаёт её как статику */
+export const CLIENT_DIST = path.join(PROJECT_ROOT, 'client', 'dist');
+
 /** Рабочая директория пайплайна */
 export const WORKDIR = path.join(PROJECT_ROOT, 'pipeline-workdir');
 

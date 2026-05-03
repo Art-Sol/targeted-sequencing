@@ -289,6 +289,29 @@ async function prepareStaging(stagingDir: string): Promise<void> {
 }
 
 /**
+ * Останавливает запущенный контейнер пайплайна (`docker stop -t <timeout>`).
+ * Best-effort: если docker недоступен или контейнер уже мёртв — молча.
+ *
+ * Используется в graceful shutdown handler'ах (SIGTERM/SIGINT). На Unix
+ * вызывается, когда сервер получает сигнал. На Windows kill сигналы не
+ * перехватываются — за shutdown отвечает Electron main процесс.
+ */
+export function stopRunningContainer(timeoutSec = 5): Promise<void> {
+  if (!state.containerId) return Promise.resolve();
+  const containerId = state.containerId;
+  return new Promise((resolve) => {
+    execFile('docker', ['stop', '-t', String(timeoutSec), containerId], (err) => {
+      if (err) {
+        console.error(`[dockerService] Failed to stop ${containerId}:`, err.message);
+      } else {
+        console.log(`[dockerService] Stopped ${containerId}`);
+      }
+      resolve();
+    });
+  });
+}
+
+/**
  * Удаляет осиротевшие staging-папки от упавших/прерванных запусков.
  *
  * Вызывается при старте сервера. Пропускает папку, соответствующую
@@ -343,34 +366,100 @@ export function checkImage(): Promise<boolean> {
 }
 
 // ============================================================
-// Восстановление состояния при рестарте сервера
+// Загрузка образа из bundled tar
 // ============================================================
 
-/** Проверить, не запущен ли контейнер пайплайна (после перезапуска сервера) */
-export async function recoverState(): Promise<void> {
+let imageLoading = false;
+let imageLoadError: string | null = null;
+
+/** true когда сейчас идёт docker load из bundled tar. */
+export function getImageLoadingStatus(): boolean {
+  return imageLoading;
+}
+
+/** Сообщение последней неудачной попытки загрузки (или null если успех/не пробовали). */
+export function getImageLoadError(): string | null {
+  return imageLoadError;
+}
+
+/** Сбрасывает error — нужно для явного retry через UI. */
+export function clearImageLoadError(): void {
+  imageLoadError = null;
+}
+
+/**
+ * Грузит Docker-образ из локального tar-архива через `docker load -i`.
+ * Длится 30-90 секунд для образа ~50 MB. Меняет `imageLoading` для UI.
+ *
+ * Идемпотентна по факту: если образ уже есть, docker load его
+ * перезапишет тем же тегом (быстро, без ошибок).
+ *
+ * Защита от concurrent: если уже идёт загрузка — second call сразу выходит.
+ * После провала пишет ошибку в `imageLoadError`. Auto-retry в health-endpoint
+ * не запускается пока ошибка не сброшена через `clearImageLoadError()`.
+ */
+export async function loadImageFromTar(tarPath: string): Promise<void> {
+  if (imageLoading) return;
+  imageLoading = true;
+  imageLoadError = null;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // 5 минут — щедрый таймаут на случай медленного диска или большого tar.
+      execFile('docker', ['load', '-i', tarPath], { timeout: 300_000 }, (err, _stdout, stderr) => {
+        if (err) reject(new Error(`docker load failed: ${stderr || err.message}`));
+        else resolve();
+      });
+    });
+    console.log(`[dockerService] Image loaded from ${tarPath}`);
+  } catch (err) {
+    imageLoadError = err instanceof Error ? err.message : String(err);
+    throw err;
+  } finally {
+    imageLoading = false;
+  }
+}
+
+// ============================================================
+// Очистка осиротевших контейнеров при старте сервера
+// ============================================================
+
+/**
+ * Если на хосте остался running контейнер пайплайна (Electron упал, юзер
+ * убил процесс через Task Manager, OOM kill и т.д.) — убиваем его.
+ *
+ * Почему не «восстанавливаем»: после краша мы потеряли pipe к stdout/stderr
+ * контейнера. Парсить прогресс уже не можем, ловить exit тоже не можем.
+ * Реально полезного восстановления нет — контейнер либо уже сделал свою
+ * работу (если результат записан, он подхватится через историю запусков),
+ * либо завис в неизвестном состоянии. Чистим и стартуем сессию заново.
+ */
+export async function killOrphanContainer(): Promise<void> {
   const isDockerAvailable = await checkDocker();
   if (!isDockerAvailable) return;
 
-  return new Promise((resolve) => {
+  const containerName = await new Promise<string | null>((resolve) => {
     execFile(
       'docker',
       ['ps', '--filter', `ancestor=${DOCKER_IMAGE}`, '--format', '{{.Names}}'],
       (err, stdout) => {
-        if (err || !stdout.trim()) {
-          resolve();
-          return;
-        }
-
-        // Контейнер найден — восстанавливаем состояние "running"
-        const containerName = stdout.trim().split('\n')[0];
-        state.status = 'running';
-        state.containerId = containerName;
-        state.runId = containerName.replace('pipeline-', '');
-
-        console.log(`[dockerService] Обнаружен запущенный контейнер: ${containerName}`);
-        resolve();
+        if (err || !stdout.trim()) resolve(null);
+        else resolve(stdout.trim().split('\n')[0]);
       },
     );
+  });
+
+  if (!containerName) return;
+
+  console.log(`[dockerService] Найден осиротевший контейнер: ${containerName}, останавливаем…`);
+  await new Promise<void>((resolve) => {
+    execFile('docker', ['stop', '-t', '5', containerName], (err) => {
+      if (err) {
+        console.error(`[dockerService] Не удалось остановить ${containerName}:`, err.message);
+      } else {
+        console.log(`[dockerService] Остановлен ${containerName}`);
+      }
+      resolve();
+    });
   });
 }
 

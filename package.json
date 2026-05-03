@@ -6,7 +6,8 @@
   "workspaces": [
     "shared",
     "client",
-    "server"
+    "server",
+    "electron"
   ],
   "scripts": {
     "dev:server": "npm run dev --workspace=server",
@@ -15,6 +16,8 @@
     "build:server": "npm run build --workspace=server",
     "build:client": "npm run build --workspace=client",
     "build": "npm run build:server && npm run build:client",
+    "electron:dev": "npm run dev --workspace=electron-app",
+    "electron:build": "npm run build --workspace=electron-app",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,css,md}\"",

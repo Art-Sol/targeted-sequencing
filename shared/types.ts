@@ -34,6 +34,10 @@ export interface HealthResponse {
   docker: boolean;
   daemon: boolean;
   image: boolean;
+  /** true когда сервер сейчас выполняет `docker load` из bundled tar. */
+  imageLoading: boolean;
+  /** Текст последней ошибки `docker load`. Auto-retry заблокирован пока поле есть. */
+  imageLoadError?: string;
   message?: string;
 }
 

@@ -18,6 +18,24 @@ import type {
 const api = axios.create();
 
 // ============================================================
+// Request interceptor: подкладываем Bearer-токен из window.appConfig
+// ============================================================
+//
+// В Electron-режиме main process генерирует случайный auth-токен и пробрасывает
+// его в renderer через preload-скрипт (см. electron/src/preload.ts).
+// Если токен есть — добавляем заголовок `Authorization: Bearer <token>`.
+// В browser-dev режиме window.appConfig не определён → заголовок не добавляется,
+// сервер тоже работает без токена.
+// ============================================================
+api.interceptors.request.use((config) => {
+  const token = window.appConfig?.token;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// ============================================================
 // Response interceptor: разворачиваем ошибку сервера
 // ============================================================
 //
@@ -149,6 +167,14 @@ export async function cleanUploads(): Promise<void> {
 export async function checkHealth(signal?: AbortSignal): Promise<HealthResponse> {
   const response = await api.get('/api/health', { signal });
   return response.data;
+}
+
+/**
+ * Сбрасывает накопившуюся ошибку загрузки образа и запускает новый docker load.
+ * Используется UI после того, как юзер заменил повреждённый tar.
+ */
+export async function retryImageLoad(): Promise<void> {
+  await api.post('/api/health/retry-image-load');
 }
 
 // ============================================================

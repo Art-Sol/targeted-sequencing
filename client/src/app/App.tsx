@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { message } from 'antd';
 import { NewAnalysisPage, HistoryPage } from '../pages';
 import { AppLayout } from './layout/layout';
 import { DockerCheck, HeaderNav, PageNames } from '../widgets';
@@ -14,8 +15,11 @@ export const App = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [metric, setMetric] = useState<MetricType>('mapped_reads');
   const pipeline = usePipelineStatus();
+  const wasImageLoadingRef = useRef(false);
 
-  const isHealthOk = Boolean(health?.docker && health?.daemon && health?.image);
+  const isHealthOk = Boolean(
+    health?.docker && health?.daemon && health?.image && !healthLoading && !health?.imageLoading,
+  );
   const hasSuccessfulRun = Boolean(runs?.some((r) => r.hasResults));
 
   useEffect(() => {
@@ -23,6 +27,28 @@ export const App = () => {
       refetchRuns();
     }
   }, [pipeline.status, refetchRuns]);
+
+  // Auto-poll /api/health во время загрузки Docker-образа из bundled tar.
+  // Загрузка длится 1-2 минуты — без polling'а UI завис бы на «Загрузка…»
+  // пока юзер сам не нажмёт «Проверить снова». При imageLoading=false
+  // (загрузка завершена/не начата) effect cleanup'ит interval.
+  useEffect(() => {
+    if (!health?.imageLoading) return;
+    const interval = setInterval(refetchHealth, 3000);
+    return () => clearInterval(interval);
+  }, [health?.imageLoading, refetchHealth]);
+
+  // Toast при успешной фоновой загрузке образа: ловим переход
+  // imageLoading=true → image=true. useRef хранит «была ли загрузка»
+  // между рендерами без триггера ре-рендера.
+  useEffect(() => {
+    if (health?.imageLoading) {
+      wasImageLoadingRef.current = true;
+    } else if (wasImageLoadingRef.current && health?.image) {
+      message.success('Docker-образ успешно загружен');
+      wasImageLoadingRef.current = false;
+    }
+  }, [health?.imageLoading, health?.image]);
 
   return (
     <AppLayout

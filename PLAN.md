@@ -254,6 +254,16 @@ targeted-sequencing/
 - Конфигурация через env-переменные (WORKDIR, PORT, DOCKER_IMAGE)
 - **Graceful shutdown**: при закрытии приложения (`app.on('before-quit')`) — остановка Express-сервера и `docker stop <container_id>` если контейнер запущен. Предотвращает зависшие контейнеры-сироты
 
+### Безопасность embedded HTTP-сервера в Electron
+
+Поскольку Express в Electron-режиме обслуживает API локально и при этом имеет доступ к Docker и файловой системе хоста (по сути — RCE-эквивалентный набор возможностей), нужны явные границы изоляции. Любое другое приложение на той же машине физически не должно иметь возможности отправить запрос на наш endpoint.
+
+- **Bind на `127.0.0.1` (loopback), не `0.0.0.0`**: Express слушает только локальную петлю. Соседи по локальной сети не видят сервер вообще, даже если знают порт. По умолчанию Node слушает `0.0.0.0` (все интерфейсы) — нужно явно передать `'127.0.0.1'` в `app.listen(port, host)`.
+- **Случайный свободный порт через `listen(0)`**: вместо хардкода (`PORT=3000`) Electron main процесс резервирует порт через `net.createServer().listen(0)` → ОС выдаёт первый свободный → передаём в Express и в renderer. Защищает от конфликтов с другими instances/приложениями и затрудняет атакующему угадывание порта.
+- **Передача порта в renderer через preload + `contextBridge`**: main → preload → `window.appConfig = { apiUrl: 'http://127.0.0.1:<port>' }` → axios baseURL берёт оттуда. Renderer не должен догадываться о порте, не должно быть hardcoded URL.
+- **Auth-токен в заголовке (опционально, рекомендуется)**: main process генерирует cryptographic random токен при старте (`crypto.randomBytes(32).toString('hex')`), пробрасывает в Express через env-переменную и в renderer через preload. Express middleware проверяет `Authorization: Bearer <token>` на каждом запросе. Защищает от сценария, когда соседнее приложение всё-таки наткнулось на порт и шлёт запросы — без токена 401. На loopback-binding'е attack surface уже мала, но явный gate гигиеничнее.
+- **CORS**: запрещено всё, кроме нашего же origin. На практике для локального HTTP это означает: либо вообще не отдаём CORS-заголовков (по умолчанию same-origin only), либо явно whitelist'им один origin Electron-окна.
+
 ### Логирование и обработка ошибок пайплайна
 
 - `dockerService.ts` захватывает stdout и stderr Docker-контейнера в реальном времени через `spawn`
@@ -415,15 +425,57 @@ UI разделён на две страницы с навигацией в ша
 
 ### Фаза 6: Electron
 
-1. Добавить electron/ с main.ts и preload.ts
-2. Запуск Express из main process как child process
-3. BrowserWindow → http://localhost:PORT
-4. Проверка Docker при старте приложения
-5. Автозапуск Docker Desktop, если daemon не запущен (Windows: `Docker Desktop.exe`, macOS: `open -a Docker`)
-6. Сборка через electron-builder для Win/Mac/Linux
-7. Убедиться что все assets (иконки, шрифты) бандлятся локально
-8. Graceful shutdown: остановка Express + docker stop при закрытии приложения
-9. **Проверить CSV-экспорт в Electron-сборке.** Frontend использует `blob:` URL для скачивания CSV (`client/src/shared/lib/download.ts`). Если в `index.html` или через `webPreferences` задан строгий CSP — он должен разрешать `blob:` (например `default-src 'self' blob: data:;`). Иначе скачивание молча упадёт. Также убедиться, что нативный «Save As» диалог корректно открывается на всех трёх ОС.
+1. ~~**Скелет `electron/`**: установить `electron`, `electron-builder`, `concurrently` как dev-зависимости; создать `electron/` с `package.json`, `tsconfig.json`, `src/main.ts` (заглушка), `src/preload.ts` (пустой); npm-скрипты `electron:dev` / `electron:build` в корне.~~ ✅
+2. ~~**Минимальный `main.ts` → пустое окно**: `app.whenReady()` → `BrowserWindow` с безопасными `webPreferences` (contextIsolation: true, nodeIntegration: false, preload), `loadURL('about:blank')`.~~ ✅
+3. ~~**Express как child process с гигиеной безопасности**~~ ✅:
+   - ~~`child_process.spawn` Express из Electron main process через `node + tsx-cli`~~
+   - ~~**Bind на `127.0.0.1`** (loopback)~~
+   - ~~**Случайный свободный порт** через `net.createServer().listen(0)`~~
+   - ~~**Передача конфига в renderer через preload + `contextBridge.exposeInMainWorld`** в base64 (`additionalArguments`) — Chromium не «съедает» аргумент, как при URL-подобных значениях~~
+   - ~~**Auth-токен**: `crypto.randomBytes(32).toString('hex')` в main → env Express'у + preload'у → middleware на `/api` проверяет `Authorization: Bearer`~~
+   - ~~Health-check polling после spawn'а — окно открывается только когда сервер ответил~~
+4. ~~**Dev vs Prod URL**~~ ✅:
+   - ~~dev: окно грузит `http://localhost:5173` (Vite спавнится из main с `SERVER_PORT` в env, Vite proxies `/api` на Express)~~
+   - ~~prod: окно грузит `http://127.0.0.1:<port>/`, Express отдаёт собранный `client/dist` как статику~~
+   - ~~Vite забинден на `127.0.0.1` (а не `localhost`/`::1`) — Node 17+ резолвит `localhost` сначала в IPv6, что ломало `waitForVite`~~
+5. ~~**Graceful shutdown**~~ ✅:
+   - ~~Electron `before-quit` orchestration: `event.preventDefault()` → `fetchPipelineStatus` → `docker stop pipeline-<runId>` (если жив) → SIGTERM Vite + Express → `waitForProcessExit` 3s → `app.quit()`~~
+   - ~~Кросс-платформенно: на Windows kill('SIGTERM') Express'а — это force-kill, поэтому Electron сам зовёт `docker stop` ДО kill сервера~~
+   - ~~Server-side handlers (SIGTERM/SIGINT) вынесены в `server/src/shutdown.ts` для standalone-run сценария (Ctrl+C в dev)~~
+   - ~~Защита от orphan-контейнера после краха Electron: `killOrphanContainer()` (бывший `recoverState`) на старте сервера — если нашли running контейнер, останавливаем~~
+6. ~~**Проверка Docker при старте**: реализовано через `/api/health` — Electron больше не блокирует startup, окно открывается сразу. UI показывает экран ошибки если daemon не отвечает.~~ ✅
+7. ~~**Автозапуск Docker Desktop**~~ ✅:
+   - ~~Sequential chain методов с per-method таймаутом 20s: `customPath` (из настроек) → `STANDARD_DOCKER_PATH` (Program Files) → `cmd /c start "" "Docker Desktop"` (App Paths registry на Windows); `open -a Docker` на macOS; на Linux skip~~
+   - ~~Кнопка «Попробовать запустить программно» в `DockerCheck` (Windows + macOS only) — IPC `docker:retry` на main → ensureDockerRunning~~
+   - ~~Persistent settings `electron/src/dockerSettings.ts` (`app.getPath('userData')/docker-settings.json`) для customPath~~
+   - ~~Windows-only inline-input в `DockerCheck` для ручного указания пути к Docker Desktop.exe (если standard search промахнулся)~~
+   - ~~IPC API через preload: `electronAPI.platform`, `getDockerCustomPath`, `setDockerCustomPath`, `retryDockerLaunch`~~
+8. ~~**Загрузка bundled Docker-образа из tar**~~ ✅:
+   - ~~Tar лежит в `electron/resources/targets-pipeline_0.1.0.tar.gz` (gzip-сжатый, ~30-40 MB), gitignored~~
+   - ~~Lazy auto-load в `/api/health`: если daemon up, image missing, есть `BUNDLED_IMAGE_TAR` env, не идёт загрузка и нет накопившейся ошибки → fire-and-forget `loadImageFromTar`~~
+   - ~~UI показывает прогресс через polling `/api/health` каждые 3 сек пока `imageLoading=true`~~
+   - ~~Error tracking: после fail'а `imageLoadError` в state блокирует auto-retry (иначе спам); юзер кликает «Попробовать заново» → `POST /api/health/retry-image-load` → clear error + new attempt~~
+   - ~~UI: `ImageLoadErrorView` с текстом ошибки от Docker и кнопкой retry~~
+9. **Production build через electron-builder** (НЕ НАЧАТО): конфиг для NSIS (Win), DMG (Mac), AppImage+deb (Linux); pipeline сборки: client (Vite) + server (tsc) + electron (tsc) → electron-builder упаковывает с `extraResources` для tar.gz.
+10. **Финальные проверки сборки** (НЕ НАЧАТО):
+    - все assets (иконки Ant Design, шрифты) бандлятся локально, нет CDN-запросов
+    - **CSV-экспорт работает в Electron-сборке**: frontend использует `blob:` URL для скачивания CSV (`client/src/shared/lib/download.ts`). Если в `index.html` или через `webPreferences` задан строгий CSP — он должен разрешать `blob:` (например `default-src 'self' blob: data:;`). Иначе скачивание молча упадёт. Проверить нативный «Save As» диалог на всех трёх ОС.
+    - test offline: отключить интернет, всё должно работать.
+
+**Бонусом сделано по ходу фазы**:
+- `electron/scripts/launch.cjs` — Node-launcher, удаляющий `ELECTRON_RUN_AS_NODE=1` (если выставлено в окружении пользователя), без чего `require('electron')` отдавал бы строку с путём к бинарнику вместо API-объекта
+- ESLint flat config — отдельный блок для `**/*.cjs`: Node-globals (`globals.node`), `sourceType: 'commonjs'`, выключен `@typescript-eslint/no-require-imports`
+- Структура `electron/src/`: `main.ts` оставлен только для лайфсайкл-логики; вспомогательное вынесено в `consts.ts`, `serverProcess.ts`, `dockerLauncher.ts`, `dockerSettings.ts`, `placeholder.ts` (удалён в шаге 4)
+- Server: вынесен `processConsts.ts` (PORT/HOST/AUTH_TOKEN), `shutdown.ts` (`registerGracefulShutdown`); CLIENT_DIST добавлен в `consts.ts`
+- Client `shared/api/client.ts`: request-interceptor добавляет `Authorization: Bearer` из `window.appConfig?.token` (browser-dev режим работает без токена)
+- Client `shared/global.d.ts`: типы для `window.appConfig` и `window.electronAPI`
+- Client `shared/ui/`: `DockerAutoLaunchButton`, `DockerCustomPathInput` — отдельные компоненты
+- Auth-middleware на сервере применяется ТОЛЬКО к `/api/*`, статика отдаётся без токена (иначе renderer не загрузит index.html)
+
+**Известные нюансы / отложено на полировку**:
+- Linux: dockerd обычно systemd-managed (требует root), auto-launch'а нет — UI показывает инструкцию `sudo systemctl start docker`
+- 32-bit Windows: `process.env.ProgramFiles` через WOW64-редирект; не покрыто (Electron 33+ всегда 64-bit на 64-bit ОС)
+- В dev запуск Express через системный `node`. В prod (шаг 9) надо переключиться на `process.execPath` + `ELECTRON_RUN_AS_NODE=1`, чтобы юзеру не требовался установленный Node.js
 
 ---
 
@@ -433,7 +485,7 @@ UI разделён на две страницы с навигацией в ша
 
 **Client:** react, react-dom, vite, antd, @ant-design/icons, axios, typescript
 
-**Electron (фаза 9):** electron, electron-builder
+**Electron (фаза 6):** electron, electron-builder, concurrently
 
 ---
 

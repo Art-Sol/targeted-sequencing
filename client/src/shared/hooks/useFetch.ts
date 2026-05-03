@@ -30,6 +30,12 @@ export interface UseFetchReturn<T> {
   data: T | null;
   loading: boolean;
   error: string | null;
+  /**
+   * true, если запрос хотя бы раз завершился (success / error).
+   * Позволяет отличить «ещё не пытались» (initial state, enabled=false)
+   * от «загрузили, получили null/пусто». Сбрасывается при смене `key`.
+   */
+  hasLoaded: boolean;
   refetch: () => void;
 }
 
@@ -61,6 +67,7 @@ export function useFetch<T>(
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState<boolean>(enabled);
   const [error, setError] = useState<string | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
   // Счётчик-триггер для refetch: инкремент → useEffect перезапускается.
   const [trigger, setTrigger] = useState(0);
   const [storedKey, setStoredKey] = useState<typeof key>(key);
@@ -71,6 +78,7 @@ export function useFetch<T>(
     setData(null);
     setError(null);
     setLoading(enabled);
+    setHasLoaded(false);
   }
 
   useEffect(() => {
@@ -103,7 +111,10 @@ export function useFetch<T>(
         if (controller.signal.aborted || axios.isCancel(err)) return;
         setError(extractErrorMessage(err));
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+          setHasLoaded(true);
+        }
       }
     }
 
@@ -119,5 +130,5 @@ export function useFetch<T>(
     setTrigger((t) => t + 1);
   }, []);
 
-  return { data, loading, error, refetch };
+  return { data, loading, error, hasLoaded, refetch };
 }

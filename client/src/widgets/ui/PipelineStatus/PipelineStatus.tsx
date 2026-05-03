@@ -84,6 +84,7 @@ export const PipelineStatus = ({
 
       {isError && error && (
         <Alert
+          className={classes.errorAlert}
           type="error"
           message="Пайплайн завершился с ошибкой"
           description={

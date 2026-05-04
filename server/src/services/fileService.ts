@@ -6,18 +6,13 @@ import type {
   ReadsListEntry,
   ValidationResult,
 } from '../types/index.js';
-import { DISK_WARNING_THRESHOLD } from '../consts.js';
+import {
+  DISK_WARNING_THRESHOLD,
+  INPUT_DATA_DIR,
+  READS_LIST_PATH,
+  WORKDIR,
+} from '../consts.js';
 import { BadRequestError } from '../errors.js';
-
-// ============================================================
-// Константы — пути к рабочим директориям
-// ============================================================
-
-// __dirname указывает на server/src/services/, поднимаемся на 3 уровня до корня проекта
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
-const WORKDIR = path.join(PROJECT_ROOT, 'pipeline-workdir');
-const INPUT_DATA_DIR = path.join(WORKDIR, 'input_data');
-const READS_LIST_PATH = path.join(WORKDIR, 'list_reads.txt');
 
 // Допустимые расширения FASTQ-файлов
 const VALID_FASTQ_EXTENSIONS = ['.fastq.gz', '.fq.gz', '.fastq', '.fq'];

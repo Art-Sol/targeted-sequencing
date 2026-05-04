@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "build": "tsc --noEmit && esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist/index.cjs",
+    "start": "node dist/index.cjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -18,6 +18,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.1",
     "@types/multer": "^1.4.12",
+    "esbuild": "^0.27.7",
     "tsx": "^4.19.4",
     "typescript": "^5.7.3"
   }

@@ -5,6 +5,15 @@ pipeline-workdir/
 .env
 .DS_Store
 
+# TypeScript incremental build cache — пересобирается на каждом билде,
+# в репозиторий не коммитится.
+*.tsbuildinfo
+
+# Готовые электрон-инсталляторы (.exe, .dmg, .AppImage, .deb).
+# Собираются через `npm run dist`, в репозиторий не коммитятся —
+# крупные бинарники, генерируются из исходников.
+release/
+
 # Bundled Docker image — собирается локально через `docker save`,
 # в репозиторий не коммитится. Поддерживаем оба формата:
 # - .tar (uncompressed, ~50 MB)

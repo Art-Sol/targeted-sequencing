@@ -2,7 +2,10 @@ import path from 'node:path';
 
 export const ROOT = path.join(__dirname, '..', '..');
 export const SERVER_DIR = path.join(ROOT, 'server');
-export const SERVER_ENTRY = path.join(SERVER_DIR, 'src', 'index.ts');
+// Dev: запускаем TS-исходник через tsx (JIT-компиляция).
+// Prod: запускаем уже собранный JS через Electron-Node (см. spawnServer).
+export const SERVER_ENTRY_DEV = path.join(SERVER_DIR, 'src', 'index.ts');
+export const SERVER_ENTRY_PROD = path.join(SERVER_DIR, 'dist', 'index.cjs');
 export const CLIENT_DIR = path.join(ROOT, 'client');
 // Прямой путь к tsx CLI вместо tsx.cmd-обёртки — обходит windows shell-quoting.
 export const TSX_CLI = path.join(ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
@@ -21,3 +24,9 @@ export const VITE_PORT = 5173;
 // (electron-builder копирует туда через extraResources).
 export const BUNDLED_IMAGE_TAR_NAME = 'targets-pipeline_0.1.0.tar.gz';
 export const RESOURCES_DIR_DEV = path.join(ROOT, 'electron', 'resources');
+
+// Имя подпапки в userData для рабочей директории пайплайна (input_data, output, staging, logs).
+// В dev pipelineWorkdir лежит в корне репозитория (наглядно), в prod — в %APPDATA%/<app-name>/
+// (единственное место, куда Electron-приложение гарантированно может писать).
+export const PIPELINE_WORKDIR_NAME = 'pipeline-workdir';
+export const PIPELINE_WORKDIR_DEV = path.join(ROOT, PIPELINE_WORKDIR_NAME);

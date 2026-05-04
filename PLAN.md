@@ -456,11 +456,33 @@ UI разделён на две страницы с навигацией в ша
    - ~~UI показывает прогресс через polling `/api/health` каждые 3 сек пока `imageLoading=true`~~
    - ~~Error tracking: после fail'а `imageLoadError` в state блокирует auto-retry (иначе спам); юзер кликает «Попробовать заново» → `POST /api/health/retry-image-load` → clear error + new attempt~~
    - ~~UI: `ImageLoadErrorView` с текстом ошибки от Docker и кнопкой retry~~
-9. **Production build через electron-builder** (НЕ НАЧАТО): конфиг для NSIS (Win), DMG (Mac), AppImage+deb (Linux); pipeline сборки: client (Vite) + server (tsc) + electron (tsc) → electron-builder упаковывает с `extraResources` для tar.gz.
+9. **Production build через electron-builder** (Windows-сборка ✅ работает end-to-end):
+   - ~~Переключить spawn Express'a с `node + tsx` на `process.execPath + ELECTRON_RUN_AS_NODE=1` (только в prod), чтобы юзеру не требовался установленный Node.js. `SERVER_ENTRY` разделён на `_DEV` (TS) и `_PROD` (compiled JS).~~ ✅
+   - ~~Конфиг electron-builder в корневом `package.json` (секция `build`): `appId`, `productName`, `files`, `asarUnpack` для `server/dist` + `node_modules` (child_process не умеет читать из asar), `extraResources` для tar.gz.~~ ✅
+   - ~~**`release/` добавить в `.gitignore`** — туда electron-builder складывает готовые инсталляторы (~250 MB).~~ ✅
+   - ~~Конфиг для NSIS (Win, `nsis.*` секция: oneClick=false, allowToChangeInstallationDirectory, ярлыки), DMG (Mac, `mac.target` x64+arm64), AppImage+deb (Linux).~~ ✅
+   - ~~Скрипты `dist` / `dist:win` / `dist:mac` / `dist:linux` в корневом package.json — каждый собирает client + server + electron перед `electron-builder`.~~ ✅
+   - ~~Первая сборка + smoke test (поставить exe, проверить что приложение запускается, UI открывается, Docker-чек проходит, пайплайн отрабатывает end-to-end).~~ ✅ — Windows
+   - **Иконки** — отложено пока нет лого. Папка `build/` (`buildResources` в конфиге) → `icon.png` 512×512, electron-builder сам сгенерирует .ico/.icns.
+   - **Code signing** — пропущено: на Windows будет SmartScreen warning «приложение от неизвестного разработчика» (юзер нажмёт «Run anyway»); на Mac Gatekeeper полностью заблокирует — для production-релиза нужен Apple Developer Account ($99/год) + notarization. Для внутреннего пользования у Димы это ок.
 10. **Финальные проверки сборки** (НЕ НАЧАТО):
     - все assets (иконки Ant Design, шрифты) бандлятся локально, нет CDN-запросов
     - **CSV-экспорт работает в Electron-сборке**: frontend использует `blob:` URL для скачивания CSV (`client/src/shared/lib/download.ts`). Если в `index.html` или через `webPreferences` задан строгий CSP — он должен разрешать `blob:` (например `default-src 'self' blob: data:;`). Иначе скачивание молча упадёт. Проверить нативный «Save As» диалог на всех трёх ОС.
     - test offline: отключить интернет, всё должно работать.
+
+11. **Полная проверка сборки на каждой ОС** (НЕ НАЧАТО): кросс-сборка из-под Windows для Linux/macOS невозможна (нативные форматы — AppImage требует `mksquashfs` на Linux, DMG требует macOS-only `hdiutil`/codesign). Поэтому проверка делается на отдельных машинах:
+    - **Linux**: на отдельной виртуальной машине Linux (Ubuntu/Debian) — `npm install && npm run dist:linux` → получаем AppImage и deb. Smoke test: установка, запуск, прогон пайплайна, CSV-экспорт. Альтернатива (если нет VM) — Docker через `electronuserland/builder` (`docker run --rm -v "${PWD}:/project" -v /project/node_modules -w /project electronuserland/builder bash -c "npm install && npm run dist:linux"`); anonymous volume на `/project/node_modules` нужен, чтобы Linux-зависимости не перетёрли Windows-овский `node_modules/`.
+    - **macOS**: на Mac-машине — `npm install && npm run dist:mac` → DMG x64 + arm64. Smoke test: drag-to-Applications, Gatekeeper-обход через `xattr -d com.apple.quarantine` (см. шаг 12), запуск, прогон пайплайна.
+    - **Долгосрочно правильно**: вынести в CI (GitHub Actions matrix-build на windows-latest + macos-latest + ubuntu-latest runners). Это уже задача за рамками фазы 6.
+
+12. **Инструкция по запуску для конечного пользователя** (НЕ НАЧАТО): создать `INSTALL.md` (или раздел в README.md) с пошаговыми инструкциями:
+    - **Windows**: скачать `.exe`, при SmartScreen-warning «Windows protected your PC» нажать «More info» → «Run anyway».
+    - **macOS**: скачать `.dmg`, перетащить в Applications. **Важно про Gatekeeper:** unsigned-приложение macOS блокирует с сообщением «cannot be opened because the developer cannot be verified». Обход:
+      - Способ 1 (GUI): System Settings → Privacy & Security → внизу будет блок «"Targeted Sequencing" was blocked» → нажать «Open Anyway».
+      - Способ 2 (CLI, надёжнее): `xattr -d com.apple.quarantine /Applications/Targeted\ Sequencing.app`
+      - Скриншоты обоих способов в инструкции.
+    - **Linux**: AppImage — `chmod +x` + двойной клик; deb — `sudo dpkg -i targeted-sequencing-*.deb`.
+    - Требования: Docker Desktop (Win/Mac) или docker daemon (Linux) должен быть установлен **отдельно** до запуска приложения.
 
 **Бонусом сделано по ходу фазы**:
 - `electron/scripts/launch.cjs` — Node-launcher, удаляющий `ELECTRON_RUN_AS_NODE=1` (если выставлено в окружении пользователя), без чего `require('electron')` отдавал бы строку с путём к бинарнику вместо API-объекта
@@ -475,7 +497,10 @@ UI разделён на две страницы с навигацией в ша
 **Известные нюансы / отложено на полировку**:
 - Linux: dockerd обычно systemd-managed (требует root), auto-launch'а нет — UI показывает инструкцию `sudo systemctl start docker`
 - 32-bit Windows: `process.env.ProgramFiles` через WOW64-редирект; не покрыто (Electron 33+ всегда 64-bit на 64-bit ОС)
-- В dev запуск Express через системный `node`. В prod (шаг 9) надо переключиться на `process.execPath` + `ELECTRON_RUN_AS_NODE=1`, чтобы юзеру не требовался установленный Node.js
+- ~~В dev запуск Express через системный `node`. В prod (шаг 9) надо переключиться на `process.execPath` + `ELECTRON_RUN_AS_NODE=1`, чтобы юзеру не требовался установленный Node.js~~ ✅ Сделано в шаге 9
+
+**Урок про esbuild + `__dirname`** (зафиксирован после фикса ENOTDIR на старте пайплайна в prod):
+В исходниках сервера WORKDIR вычислялся через `path.resolve(__dirname, '..', '..', 'pipeline-workdir')`. В dev (tsx, файл-за-файлом) `__dirname` указывал на `server/src/`, путь резолвился в корень репо. **После esbuild bundling в один `index.cjs` `__dirname` указывает на расположение бандла** — в prod это `<install>/resources/app.asar/server/dist/`, и подъём на 2 уровня даёт `app.asar/pipeline-workdir/` — а это путь ВНУТРИ asar-архива (read-only файла). Electron'овский asar-fs-патч на `mkdir` отвечает `ENOTDIR`. Фикс: путь к workdir передаётся серверу из Electron-main через env `PIPELINE_WORKDIR` (= `app.getPath('userData')/pipeline-workdir`); fallback на старую `__dirname`-логику оставлен для standalone-dev сервера (`npm run dev:server`). Заодно зачищен дубликат WORKDIR/INPUT_DATA_DIR/READS_LIST_PATH в `fileService.ts` — в dev пути совпадали случайно (разная глубина начала + одинаковый `..`-подъём), после bundling разъезжались. **Mental model**: `__dirname`-based пути живут ровно до первого bundler'а; для runtime-paths используй env или явные cli-аргументы.
 
 ---
 

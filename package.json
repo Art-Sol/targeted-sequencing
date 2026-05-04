@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/dist/main.js",
+  "description": "Веб-интерфейс для пайплайна таргетного секвенирования",
+  "author": {
+    "name": "Artem Sol"
+  },
   "workspaces": [
     "shared",
     "client",
@@ -18,10 +23,90 @@
     "build": "npm run build:server && npm run build:client",
     "electron:dev": "npm run dev --workspace=electron-app",
     "electron:build": "npm run build --workspace=electron-app",
+    "dist": "npm run build && npm run electron:build && electron-builder",
+    "dist:win": "npm run build && npm run electron:build && electron-builder --win",
+    "dist:mac": "npm run build && npm run electron:build && electron-builder --mac",
+    "dist:linux": "npm run build && npm run electron:build && electron-builder --linux",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,css,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,css,md}\""
+  },
+  "build": {
+    "appId": "com.targetedsequencing.app",
+    "productName": "Targeted Sequencing",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/dist/**/*",
+      "electron/scripts/**/*",
+      "server/dist/**/*",
+      "server/package.json",
+      "client/dist/**/*",
+      "shared/**/*",
+      "package.json",
+      "node_modules/**/*",
+      "!**/node_modules/*/{README.md,readme.md,CHANGELOG.md,changelog.md,*.d.ts}",
+      "!**/node_modules/.cache/**/*",
+      "!**/node_modules/.vite/**/*",
+      "!**/{test,tests,__tests__,__mocks__,coverage,docs,doc,example,examples}/**/*",
+      "!**/*.{md,markdown,map}",
+      "!**/.{git,gitignore,gitattributes,editorconfig,eslintrc*,prettierrc*,npmignore,DS_Store}"
+    ],
+    "asarUnpack": [
+      "server/dist/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/resources/targets-pipeline_0.1.0.tar.gz",
+        "to": "targets-pipeline_0.1.0.tar.gz"
+      }
+    ],
+    "extraMetadata": {
+      "type": "commonjs"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "targeted-sequencing-setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "artifactName": "targeted-sequencing-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Science",
+      "artifactName": "targeted-sequencing-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

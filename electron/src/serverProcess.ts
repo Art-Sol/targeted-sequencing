@@ -1,11 +1,13 @@
 import http from 'node:http';
+import path from 'node:path';
 import { spawn, execFile, ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import {
   CLIENT_DIR,
   SERVER_DIR,
-  SERVER_ENTRY,
+  SERVER_ENTRY_DEV,
+  SERVER_ENTRY_PROD,
   SERVER_HOST,
   TSX_CLI,
   VITE_CLI,
@@ -44,8 +46,12 @@ export function generateToken(): string {
 }
 
 /**
- * Спавним Express через системный node + tsx CLI напрямую (минуя tsx.cmd
- * на Windows — она требует shell:true, что плохо с путями с кириллицей/пробелами).
+ * Спавним Express. В dev — через системный node + tsx CLI напрямую (минуя
+ * tsx.cmd на Windows — она требует shell:true, что плохо с путями с
+ * кириллицей/пробелами). В prod — через сам Electron-бинарник с флагом
+ * ELECTRON_RUN_AS_NODE=1, который заставляет его вести себя как Node.js
+ * (именно так Electron официально предоставляет Node-runtime без отдельной
+ * установки Node на машине пользователя).
  *
  * `bundledImageTar`, если задан, пробрасывается в Express через env
  * `BUNDLED_IMAGE_TAR` — `/api/health` использует его для авто-загрузки образа.
@@ -55,19 +61,41 @@ export function generateToken(): string {
 export function spawnServer(
   port: number,
   token: string,
-  bundledImageTar?: string,
+  bundledImageTar: string | undefined,
+  pipelineWorkdir: string,
+  isPackaged: boolean,
 ): ChildProcess {
-  return spawn('node', [TSX_CLI, SERVER_ENTRY], {
+  const executable = isPackaged ? process.execPath : 'node';
+  const args = isPackaged ? [SERVER_ENTRY_PROD] : [TSX_CLI, SERVER_ENTRY_DEV];
+
+  // В dev SERVER_DIR (= <repo>/server) — реальная папка на диске, всё ок.
+  // В prod SERVER_DIR указывает внутрь app.asar (это файл-архив, не папка),
+  // и Windows-вызов SetCurrentDirectory() для cwd падает с ENOENT.
+  // Spawn возвращает «executable not found», хотя реальная причина — в cwd.
+  // Фикс: в prod передаём папку установки приложения (рядом с Electron.exe) —
+  // серверу всё равно где cwd, все его пути абсолютные.
+  const cwd = isPackaged ? path.dirname(process.execPath) : SERVER_DIR;
+
+  return spawn(executable, args, {
     env: {
       ...process.env,
       PORT: String(port),
       HOST: SERVER_HOST,
       AUTH_TOKEN: token,
+      // Абсолютный путь к pipeline-workdir. Server.consts читает его и НЕ
+      // вычисляет путь сам — иначе после esbuild bundle __dirname попадает
+      // внутрь app.asar (read-only архив), и mkdir падает ENOTDIR.
+      PIPELINE_WORKDIR: pipelineWorkdir,
       ...(bundledImageTar ? { BUNDLED_IMAGE_TAR: bundledImageTar } : {}),
+      // Только в prod: переключаем Electron-бинарник в режим Node.js.
+      // В dev запускаем системный node — этот флаг не нужен и был бы вреден.
+      ...(isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
     },
-    stdio: 'inherit',
-    cwd: SERVER_DIR,
-    // GUI-родитель (Electron) спавнит console-ребёнка (node) — без этого
+    // pipe вместо inherit: GUI-родитель не имеет stdout, ребёнковский вывод
+    // надо явно подхватывать (см. pipeChildToLog) — иначе server-логи теряются.
+    stdio: ['ignore', 'pipe', 'pipe'],
+    cwd,
+    // GUI-родитель (Electron) спавнит console-ребёнка — без этого
     // Windows создаст ему отдельное чёрное окно консоли.
     windowsHide: true,
   });
@@ -83,7 +111,7 @@ export function spawnVite(serverPort: number): ChildProcess {
       ...process.env,
       SERVER_PORT: String(serverPort),
     },
-    stdio: 'inherit',
+    stdio: ['ignore', 'pipe', 'pipe'],
     cwd: CLIENT_DIR,
     windowsHide: true,
   });

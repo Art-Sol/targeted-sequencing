@@ -1,8 +1,15 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { ChildProcess } from 'node:child_process';
-import { SERVER_HOST, VITE_PORT, BUNDLED_IMAGE_TAR_NAME, RESOURCES_DIR_DEV } from './consts';
+import {
+  SERVER_HOST,
+  VITE_PORT,
+  BUNDLED_IMAGE_TAR_NAME,
+  RESOURCES_DIR_DEV,
+  PIPELINE_WORKDIR_DEV,
+  PIPELINE_WORKDIR_NAME,
+} from './consts';
 import {
   reserveFreePort,
   generateToken,
@@ -16,6 +23,10 @@ import {
 } from './serverProcess';
 import { ensureDockerRunning, checkDockerDaemon } from './dockerLauncher';
 import { getRawDockerCustomPath, setDockerCustomPath } from './dockerSettings';
+import { initLogger, pipeChildToLog } from './logger';
+
+const logFile = initLogger();
+console.log(`[main] Logger initialized at ${logFile}`);
 
 // IPC handlers для управления Docker'ом из renderer'а.
 // Регистрируем на module-level (до whenReady) — ipcMain singleton
@@ -74,9 +85,18 @@ app.whenReady().then(async () => {
     );
     const bundledTarToPass = existsSync(bundledTar) ? bundledTar : undefined;
 
-    console.log(`[main] Reserved port ${port}, spawning Express…`);
+    // Рабочая директория пайплайна. В dev — корень репозитория (наглядно для разработки),
+    // в prod — userData (%APPDATA%/<app-name>/), единственное место, куда Electron-приложение
+    // гарантированно может писать. ASAR-архив (resources/app.asar) read-only — туда нельзя.
+    const pipelineWorkdir = app.isPackaged
+      ? path.join(app.getPath('userData'), PIPELINE_WORKDIR_NAME)
+      : PIPELINE_WORKDIR_DEV;
 
-    serverProcess = spawnServer(port, token, bundledTarToPass);
+    console.log(`[main] Reserved port ${port}, spawning Express…`);
+    console.log(`[main] Pipeline workdir: ${pipelineWorkdir}`);
+
+    serverProcess = spawnServer(port, token, bundledTarToPass, pipelineWorkdir, app.isPackaged);
+    pipeChildToLog(serverProcess, 'server');
 
     serverProcess.on('exit', (code, signal) => {
       console.error(`[main] Express exited (code=${code}, signal=${signal})`);
@@ -95,6 +115,7 @@ app.whenReady().then(async () => {
       console.log('[main] Dev mode - spawning Vite...');
 
       viteProcess = spawnVite(port);
+      pipeChildToLog(viteProcess, 'vite');
       viteProcess.on('exit', (code, signal) => {
         console.error(`[main] Vite exited (code=${code}, signal=${signal})`);
         if (!isQuitting && (code !== 0 || !app.isReady())) app.quit();
@@ -111,7 +132,14 @@ app.whenReady().then(async () => {
 
     createWindow();
   } catch (err) {
-    console.error('[main] Failed to start:', err);
+    const errMsg = err instanceof Error ? err.stack || err.message : String(err);
+    console.error('[main] Failed to start:', errMsg);
+    // Нативный модал Electron — работает даже когда BrowserWindow не создано.
+    // Без него юзер увидит «приложение мигнуло и пропало» и не узнает где лог.
+    dialog.showErrorBox(
+      'Не удалось запустить приложение',
+      `Произошла ошибка при инициализации:\n\n${errMsg}\n\nПолный лог:\n${logFile}`,
+    );
     app.quit();
   }
 });

@@ -27,8 +27,19 @@ export const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 /** Папка с собранным клиентом — в Electron-prod Express отдаёт её как статику */
 export const CLIENT_DIST = path.join(PROJECT_ROOT, 'client', 'dist');
 
-/** Рабочая директория пайплайна */
-export const WORKDIR = path.join(PROJECT_ROOT, 'pipeline-workdir');
+/**
+ * Рабочая директория пайплайна.
+ *
+ * В Electron-режиме путь приходит через env-переменную `PIPELINE_WORKDIR`
+ * (Electron-main вычисляет её как `app.getPath('userData')/pipeline-workdir`).
+ * Это критично для prod-сборки: после esbuild bundling `__dirname` указывает
+ * внутрь `app.asar` (read-only архив), и `mkdir` падает с ENOTDIR.
+ *
+ * Fallback на `PROJECT_ROOT/pipeline-workdir` — для standalone-запуска server
+ * без Electron (`npm run dev:server`).
+ */
+export const WORKDIR =
+  process.env.PIPELINE_WORKDIR ?? path.join(PROJECT_ROOT, 'pipeline-workdir');
 
 /** Папка для входных FASTQ-файлов */
 export const INPUT_DATA_DIR = path.join(WORKDIR, 'input_data');

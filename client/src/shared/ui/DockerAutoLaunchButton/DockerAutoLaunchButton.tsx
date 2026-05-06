@@ -3,15 +3,13 @@ import { Button, message } from 'antd';
 
 /**
  * Кнопка «Попробовать запустить программно» — обращается через preload-мост
- * к Electron main process, который пробует поднять Docker Desktop по цепочке
- * методов (customPath → ProgramFiles → shell на Windows; `open -a Docker` на macOS).
+ * к Electron main process, который пробует поднять Docker по платформенной
+ * цепочке методов (Windows: customPath → ProgramFiles → shell; macOS:
+ * `open -a Docker`; Linux: `pkexec systemctl start docker` с GUI prompt).
  *
- * Видна только на платформах с реализованным auto-launch'ем:
- *   - Windows
- *   - macOS
- * На Linux и в browser-dev режиме (`window.electronAPI` отсутствует) — null.
+ * В browser-dev режиме (`window.electronAPI` отсутствует) — null.
  */
-const AUTO_LAUNCH_PLATFORMS = ['win32', 'darwin'] as const;
+const AUTO_LAUNCH_PLATFORMS = ['win32', 'darwin', 'linux'] as const;
 
 interface DockerAutoLaunchButtonProps {
   /** Колбэк после попытки запуска — обычно refetch /api/health на родителе. */

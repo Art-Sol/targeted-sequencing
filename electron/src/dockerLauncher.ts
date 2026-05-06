@@ -82,6 +82,26 @@ function spawnMacDocker(): void {
 }
 
 /**
+ * Linux: `pkexec systemctl start docker` показывает GUI password prompt
+ * (через Polkit), запрашивает пароль root, после ввода стартует daemon.
+ *
+ * НЕ detached — pkexec должен жить пока юзер вводит пароль. Если юзер нажал
+ * Cancel или ввёл неверный пароль → exit code != 0; logger пишет это, дальше
+ * polling всё равно попробует подождать daemon (вдруг другой процесс поднял).
+ */
+function spawnLinuxDocker(): void {
+  const child = spawn('pkexec', ['systemctl', 'start', 'docker'], { stdio: 'ignore' });
+  child.on('error', (err) => {
+    console.warn(`[dockerLauncher] pkexec systemctl start docker failed: ${err.message}`);
+  });
+  child.on('exit', (code) => {
+    if (code !== 0) {
+      console.warn(`[dockerLauncher] pkexec exited with code ${code} (cancelled or wrong password)`);
+    }
+  });
+}
+
+/**
  * Возвращает упорядоченный список методов запуска для текущей платформы.
  * Каждый метод имеет имя (для логов) и launch-функцию (без ожидания).
  */
@@ -107,7 +127,9 @@ function getLaunchMethods(): LaunchMethod[] {
   if (process.platform === 'darwin') {
     return [{ name: 'open -a Docker', launch: spawnMacDocker }];
   }
-  // Linux: dockerd обычно systemd-managed (требует root). Auto-launch'а нет.
+  if (process.platform === 'linux') {
+    return [{ name: 'pkexec systemctl start docker', launch: spawnLinuxDocker }];
+  }
   return [];
 }
 

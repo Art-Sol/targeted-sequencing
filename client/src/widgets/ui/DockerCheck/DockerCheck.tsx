@@ -101,7 +101,10 @@ export const DockerCheck = ({ health, loading, onRetry, children }: DockerCheckP
               загрузки.
             </Paragraph>
             <Paragraph>
-              <strong>Linux:</strong> выполните команду <code>sudo systemctl start docker</code>
+              <strong>Linux:</strong> выполните команду <code>sudo systemctl start docker</code>.
+              Если ошибка остаётся — текущий пользователь не имеет доступа к Docker. Добавьте его в
+              группу <code>docker</code> и выйдите/войдите в систему:{' '}
+              <code>sudo usermod -aG docker $USER</code>
             </Paragraph>
             <Paragraph type="secondary">
               После запуска нажмите &laquo;Проверить снова&raquo;.

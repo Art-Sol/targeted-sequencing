@@ -20,3 +20,9 @@ release/
 # - .tar.gz (gzip-compressed, ~30-40 MB)
 electron/resources/*.tar
 electron/resources/*.tar.gz
+
+# Внутренний рабочий план разработчика — в репозиторий не коммитится.
+PLAN.md
+
+# Локальные настройки Claude Code (permissions, history) — у каждой машины свои.
+.claude/

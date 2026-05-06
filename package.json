@@ -6,7 +6,8 @@
   "main": "electron/dist/main.js",
   "description": "Веб-интерфейс для пайплайна таргетного секвенирования",
   "author": {
-    "name": "Artem Sol"
+    "name": "Artem Sol",
+    "email": "solodushenkov-sp@mail.ru"
   },
   "workspaces": [
     "shared",

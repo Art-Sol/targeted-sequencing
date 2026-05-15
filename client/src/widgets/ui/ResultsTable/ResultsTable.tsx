@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
-import { Table, Flex, Typography, Card, Skeleton } from 'antd';
+import { Table, Flex, Typography, Card, Skeleton, Tooltip } from 'antd';
 import type { TableColumnsType } from 'antd';
+import { ExclamationCircleOutlined } from '@ant-design/icons';
 import type { PipelineResults, MetricType } from '../../../shared/model/types';
 import { buildResultsMatrix, type ResultsRow } from '../../../shared/lib/results/buildMatrix';
 import { formatValue } from '../../../shared/lib/format/formatValue';
@@ -62,15 +63,22 @@ export const ResultsTable = ({ isLoading, results, metric, onMetricChange }: Res
       width: 180,
     };
     const determinantColumns = matrix.determinantIds.map((id) => ({
-      title: id.split('|').join(' | '),
+      title: (
+        <Tooltip title={id.split('|').join(' | ')}>
+          <span>{matrix.displayMap.get(id) ?? id}</span>
+        </Tooltip>
+      ),
       dataIndex: id,
       key: id,
       align: 'right' as const,
       render: (value: number) => formatValue(value, metric),
       onHeaderCell: () => ({ className: classes.nowrapHeader }),
-      onCell: (row: ResultsRow) => ({
-        className: row[id] === 0 ? classes.zeroCell : undefined,
-      }),
+      onCell: (row: ResultsRow) => {
+        const value = row[id];
+        if (value === 0) return { className: classes.zeroCell };
+        if (metric === 'presence' && value === 1) return { className: classes.oneCell };
+        return {};
+      },
     }));
     return [sampleColumn, ...determinantColumns];
   }, [matrix, metric]);
@@ -107,6 +115,13 @@ export const ResultsTable = ({ isLoading, results, metric, onMetricChange }: Res
         bordered
         size="small"
       />
+      {matrix && metric === 'presence' && (
+        <Text type="secondary" className={classes.presenceNote}>
+          <ExclamationCircleOutlined className={classes.presenceNoteIcon} />
+          Ввиду особенностей секвенирования отдельных мишеней, для каждой из них подобран
+          индивидуальный порог чувствительности детекции
+        </Text>
+      )}
     </Card>
   );
 };

@@ -13,7 +13,7 @@ export const App = () => {
   const { data: runs, loading: runsLoading, refetch: refetchRuns } = useRuns();
   const [currentPage, setCurrentPage] = useState<PageNames>(PageNames.NEW);
   const [currentStep, setCurrentStep] = useState(0);
-  const [metric, setMetric] = useState<MetricType>('mapped_reads');
+  const [metric, setMetric] = useState<MetricType>('presence');
   const pipeline = usePipelineStatus();
   const wasImageLoadingRef = useRef(false);
 

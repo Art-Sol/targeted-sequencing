@@ -1,9 +1,22 @@
 /*
  * Подсветка нулевых ячеек. Семантика: "таргет не обнаружен" — это
- * хороший результат (в клинической диагностике), поэтому зелёный
+ * хороший результат (в клинической диагностике), поэтому зелёный.
+ *
+ * Двойной селектор (.zeroCell.zeroCell) намеренно повышает CSS specificity
+ * до 0,0,2,0 — это перебивает hover-стили AntD Table (.ant-table-cell-row-hover),
+ * иначе при наведении фон уходил бы в дефолтный серый.
  */
 .zeroCell.zeroCell {
   background-color: #f6ffed; /* Ant Design @success-bg */
+}
+
+/*
+ * Подсветка ячеек presence=1 (таргет обнаружен). Применяется только
+ * в режиме "Presence". Цвет — мягкий красный (AntD @error-bg-hover),
+ * парный по тону к зелёному @success-bg.
+ */
+.oneCell.oneCell {
+  background-color: #ffe7e6;
 }
 
 .nowrapHeader.nowrapHeader {
@@ -16,4 +29,17 @@
 
 .cardTitle {
   margin: 16px 0;
+}
+
+/* Подпись-предупреждение под таблицей в режиме Presence.
+   display: block нужен, потому что AntD Text рендерится в <span>,
+   а у inline-элемента margin-top игнорируется. */
+.presenceNote {
+  display: block;
+  margin-top: 12px;
+}
+
+.presenceNoteIcon {
+  margin-right: 6px;
+  color: #faad14; /* Ant Design @warning-color */
 }

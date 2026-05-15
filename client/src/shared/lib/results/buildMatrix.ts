@@ -1,4 +1,5 @@
 import type { PipelineResults, MetricType } from '../../model/types';
+import { buildDeterminantDisplayMap } from '../format/formatDeterminantId';
 
 // ============================================================
 // Преобразование PipelineResults → матрица для таблицы
@@ -34,6 +35,10 @@ export interface ResultsMatrix {
   determinantIds: string[];
   /** Строки — по одной на каждый образец */
   rows: ResultsRow[];
+  /** Соответствие исходный determinant_id → отображаемое имя для заголовка колонки.
+   *  Шаренный источник истины для UI-таблицы и CSV-экспорта — гарантирует,
+   *  что header в файле и колонка на экране называются одинаково. */
+  displayMap: Map<string, string>;
 }
 
 /**
@@ -74,5 +79,7 @@ export function buildResultsMatrix(results: PipelineResults, metric: MetricType)
     return row;
   });
 
-  return { determinantIds, rows };
+  const displayMap = buildDeterminantDisplayMap(determinantIds);
+
+  return { determinantIds, rows, displayMap };
 }

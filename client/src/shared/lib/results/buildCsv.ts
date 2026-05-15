@@ -47,12 +47,14 @@ function escapeCell(value: string | number): string {
  *
  * - mapped_reads — целые, без разделителей разрядов
  * - rpkm — два знака после запятой, точка как десятичный разделитель
+ * - presence — словесная метка "Да" (1) / "Нет" (0) — синхронно с UI
  *
  * Точка (а не запятая) — стандарт машинно-читаемых форматов: pandas/R
  * парсят `12.34` без дополнительных опций.
  */
 function formatNumber(value: number, metric: MetricType): string {
   if (metric === 'rpkm') return value.toFixed(2);
+  if (metric === 'presence') return value === 1 ? 'Да' : 'Нет';
   return String(value);
 }
 
@@ -68,7 +70,11 @@ function formatNumber(value: number, metric: MetricType): string {
  */
 export function buildCsv(matrix: ResultsMatrix, metric: MetricType): string {
   // --- Заголовок ---
-  const header = ['sample_id', ...matrix.determinantIds].map(escapeCell).join(DELIMITER);
+  // Используем отображаемые имена из displayMap (как в UI), а не сырые ID.
+  // Это гарантирует, что header в файле совпадает с заголовками колонок на экране,
+  // включая разрешение коллизий через координаты в скобках.
+  const headerCells = matrix.determinantIds.map((id) => matrix.displayMap.get(id) ?? id);
+  const header = ['sample_id', ...headerCells].map(escapeCell).join(DELIMITER);
 
   // --- Строки данных ---
   const dataLines = matrix.rows.map((row) => {

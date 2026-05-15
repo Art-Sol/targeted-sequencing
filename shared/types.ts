@@ -42,7 +42,7 @@ export interface HealthResponse {
 }
 
 /** Метрика для отображения в таблице */
-export type MetricType = 'mapped_reads' | 'rpkm';
+export type MetricType = 'mapped_reads' | 'rpkm' | 'presence';
 
 // ============================================================
 // Типы для загрузки файлов

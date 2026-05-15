@@ -17,6 +17,12 @@ export const DeterminantSchema = z.object({
   reference_length: z.number().int().nonnegative(),
   mapped_reads: z.number().int().nonnegative(),
   rpkm: z.number().nonnegative(),
+  // Литералы 0/1 вместо общего number — TS-тип будет `0 | 1`,
+  // компилятор не даст положить 2 или 0.5.
+  presence: z.union([z.literal(0), z.literal(1)]),
+  // Порог по mapped_reads, начиная с которого presence=1.
+  // Приходит для каждого determinant'а (значения могут отличаться).
+  presence_threshold: z.number().int().nonnegative(),
 });
 
 /** Режим секвенирования: single-end или paired-end */

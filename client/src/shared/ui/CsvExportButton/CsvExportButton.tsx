@@ -20,14 +20,28 @@ interface CsvExportButtonProps {
   metric: MetricType;
   /** Идентификатор запуска для имени файла. Если не задан — подставится 'results' */
   runId?: string;
+  /** Пользовательское имя запуска. Если задано — добавляется префиксом в имя файла. */
+  name?: string;
 }
 
-export const CsvExportButton = ({ results, metric, runId }: CsvExportButtonProps) => {
+const MAX_NAME_PART = 50;
+
+/**
+ * Готовит имя запуска для использования в имени CSV-файла:
+ * заменяет пробелы на `_` и обрезает до MAX_NAME_PART символов.
+ * Остальные символы безопасны — сервер уже отфильтровал на этапе ввода.
+ */
+function sanitizeFilenamePart(name: string): string {
+  return name.replace(/ /g, '_').slice(0, MAX_NAME_PART);
+}
+
+export const CsvExportButton = ({ results, metric, runId, name }: CsvExportButtonProps) => {
   const handleClick = () => {
     const matrix = buildResultsMatrix(results, metric);
     const csv = buildCsv(matrix, metric);
     const safeRunId = runId ?? 'results';
-    const filename = `${safeRunId}_${metric}.csv`;
+    const namePart = name ? `${sanitizeFilenamePart(name)}_` : '';
+    const filename = `${namePart}${safeRunId}_${metric}.csv`;
     downloadFile(csv, filename, 'text/csv;charset=utf-8');
   };
 

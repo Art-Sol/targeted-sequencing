@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { ChildProcess } from 'node:child_process';
@@ -74,6 +74,11 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   try {
+    // На Windows/Linux убираем дефолтный menu bar — он бесполезен для пользователя.
+    // На macOS оставляем: системное меню — часть платформенного UX и источник
+    // стандартных шорткатов редактирования (⌘C/⌘V/⌘X/⌘Z).
+    if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
+
     port = await reserveFreePort();
     token = generateToken();
 

@@ -21,13 +21,21 @@ interface ResultsTableProps {
   results?: PipelineResults;
   metric: MetricType;
   onMetricChange: (metric: MetricType) => void;
+  /** Имя запуска. Если задано — показывается слева в заголовке Card. */
+  runName?: string;
 }
 
 // ============================================================
 // ResultsTable — таблица результатов пайплайна (с встроенным скелетоном)
 // ============================================================
 
-export const ResultsTable = ({ isLoading, results, metric, onMetricChange }: ResultsTableProps) => {
+export const ResultsTable = ({
+  isLoading,
+  results,
+  metric,
+  onMetricChange,
+  runName,
+}: ResultsTableProps) => {
   const showSkeleton = Boolean(isLoading || !results);
 
   const matrix = useMemo(
@@ -86,18 +94,27 @@ export const ResultsTable = ({ isLoading, results, metric, onMetricChange }: Res
   const dataSource = matrix?.rows ?? (SKELETON_ROWS as unknown as ResultsRow[]);
 
   const cardTitle = (
-    <Flex justify="space-between" align="center" className={classes.cardTitle}>
-      {showSkeleton || !matrix ? (
-        <Skeleton.Input active size="small" />
-      ) : (
-        <Text strong>
-          Образцов: {matrix.rows.length} · Таргетов: {matrix.determinantIds.length}
-        </Text>
-      )}
+    <Flex justify="space-between" align="center" gap={16} className={classes.cardTitle}>
+      <Flex align="center" gap={12} className={classes.cardTitleLeft}>
+        {showSkeleton || !matrix ? (
+          <Skeleton.Input active size="small" />
+        ) : (
+          <>
+            {runName && (
+              <Text strong className={classes.runName}>
+                {runName}
+              </Text>
+            )}
+            <Text type="secondary" className={classes.tableSummary}>
+              Образцов: {matrix.rows.length} · Таргетов: {matrix.determinantIds.length}
+            </Text>
+          </>
+        )}
+      </Flex>
       {showSkeleton ? (
         <Skeleton.Input active size="small" />
       ) : (
-        <Flex align="center">
+        <Flex align="center" className={classes.cardTitleRight}>
           <Text className={classes.metricLabel}>Метрика:</Text>
           <MetricToggle value={metric} onChange={onMetricChange} />
         </Flex>

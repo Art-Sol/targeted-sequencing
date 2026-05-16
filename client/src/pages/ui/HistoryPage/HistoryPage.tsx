@@ -63,6 +63,8 @@ export const HistoryPage = ({
     enabled: selectedRunId !== undefined,
   });
 
+  const selectedRun = runs?.find((r) => r.runId === selectedRunId);
+
   // Авто-выбор: при первой загрузке списка — самый свежий успешный запуск.
   useEffect(() => {
     if (selectedRunId === undefined && runs && runs.length > 0) {
@@ -136,7 +138,14 @@ export const HistoryPage = ({
             <Button icon={<PlayCircleOutlined />} onClick={onNavigateToNew}>
               Новый анализ
             </Button>
-            {results && <CsvExportButton results={results} metric={metric} runId={selectedRunId} />}
+            {results && (
+              <CsvExportButton
+                results={results}
+                metric={metric}
+                runId={selectedRunId}
+                name={selectedRun?.name}
+              />
+            )}
           </Flex>
           <Flex align="center" gap={8}>
             <Text>Ранее выполненные анализы:</Text>
@@ -156,6 +165,7 @@ export const HistoryPage = ({
           results={results ?? undefined}
           metric={metric}
           onMetricChange={onMetricChange}
+          runName={selectedRun?.name}
         />
       </Flex>
     </Content>

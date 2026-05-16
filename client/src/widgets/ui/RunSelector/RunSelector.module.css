@@ -1,13 +1,37 @@
 .runSelector {
-  min-width: 260px;
+  width: 360px;
+  max-width: 360px;
 }
 
 .runErrorTag {
-  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 .optionLabel {
   width: 100%;
+}
+
+.optionInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.optionNameRow {
+  width: 100%;
+  min-width: 0;
+}
+
+.optionName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionDate {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
 }
 
 .divider {

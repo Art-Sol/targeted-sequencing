@@ -36,6 +36,7 @@ export function usePipelineStatus() {
   return {
     status: data?.status ?? 'idle',
     runId: data?.runId,
+    name: data?.name,
     error: data?.error,
     samplesProcessed: data?.samplesProcessed,
     totalSamples: data?.totalSamples,

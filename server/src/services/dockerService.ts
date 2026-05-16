@@ -13,6 +13,7 @@ import {
 } from '../consts';
 import { ConflictError } from '../errors';
 import { parseReadsList } from './fileService';
+import { saveRunMetadata } from './resultsService';
 
 // ============================================================
 // Состояние пайплайна (singleton — живёт в памяти сервера)
@@ -21,6 +22,8 @@ import { parseReadsList } from './fileService';
 interface PipelineState {
   status: PipelineStatus;
   runId: string | null;
+  /** Имя текущего/последнего запуска. Сбрасывается при `resetPipelineState`. */
+  name: string | null;
   containerId: string | null;
   exitCode: number | null;
   error: string | null;
@@ -32,6 +35,7 @@ interface PipelineState {
 const state: PipelineState = {
   status: 'idle',
   runId: null,
+  name: null,
   containerId: null,
   exitCode: null,
   error: null,
@@ -53,6 +57,7 @@ export function getPipelineStatus() {
   return {
     status: state.status,
     runId: state.runId ?? undefined,
+    name: state.name ?? undefined,
     exitCode: state.exitCode ?? undefined,
     error: state.error ?? undefined,
     totalSamples: state.totalSamples ?? undefined,
@@ -83,6 +88,7 @@ export function resetPipelineState(): void {
   }
   state.status = 'idle';
   state.runId = null;
+  state.name = null;
   state.containerId = null;
   state.exitCode = null;
   state.error = null;
@@ -103,7 +109,7 @@ export function resetPipelineState(): void {
  * через runPipelineBackground. Её ошибки ловятся в .catch() и
  * переводят state в 'error' — клиент увидит это на следующем poll.
  */
-export async function runPipeline(): Promise<{ runId: string }> {
+export async function runPipeline(name: string): Promise<{ runId: string }> {
   if (state.status === 'running') {
     throw new ConflictError('Пайплайн уже запущен');
   }
@@ -113,6 +119,7 @@ export async function runPipeline(): Promise<{ runId: string }> {
   // Сбрасываем state в running СРАЗУ
   state.status = 'running';
   state.runId = runId;
+  state.name = name;
   state.containerId = `pipeline-${runId}`;
   state.exitCode = null;
   state.error = null;
@@ -122,7 +129,7 @@ export async function runPipeline(): Promise<{ runId: string }> {
 
   // Fire-and-forget: длительная подготовка + spawn в фоне.
   // .catch() ОБЯЗАТЕЛЕН — без него unhandled rejection кладёт процесс Node.js.
-  runPipelineBackground(runId).catch((err: unknown) => {
+  runPipelineBackground(runId, name).catch((err: unknown) => {
     console.error('[dockerService] Pipeline setup failed:', err);
     state.status = 'error';
     state.containerId = null;
@@ -145,7 +152,7 @@ export async function runPipeline(): Promise<{ runId: string }> {
  * catch'ем в runPipeline. Ошибки после spawn обрабатываются handlers'ами
  * child.on('close') / child.on('error') — state переводится в 'error' там.
  */
-async function runPipelineBackground(runId: string): Promise<void> {
+async function runPipelineBackground(runId: string, name: string): Promise<void> {
   const runOutputDir = path.join(OUTPUT_DIR, runId);
   const stagingDir = path.join(STAGING_DIR, runId);
   const logPath = path.join(LOGS_DIR, `pipeline_${runId}.log`);
@@ -155,6 +162,10 @@ async function runPipelineBackground(runId: string): Promise<void> {
   await fs.mkdir(runOutputDir, { recursive: true });
   await fs.mkdir(stagingDir, { recursive: true });
   await fs.mkdir(LOGS_DIR, { recursive: true });
+
+  // Пишем metadata.json ДО spawn'а контейнера — чтобы даже упавшие/прерванные
+  // запуски попадали в историю с именем (см. listRuns).
+  await saveRunMetadata(runId, name);
 
   // Staging: hardlink'и всех FASTQ в stagingDir. Оригиналы в INPUT_DATA_DIR
   // не тронутся, пайплайн удалит только свои hardlink'и.

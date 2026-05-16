@@ -5,6 +5,7 @@ export { StatusBadge } from './ui/PipelineStatus/StatusBadge';
 export { DockerCheck } from './ui/DockerCheck/DockerCheck';
 export { ResultsTable } from './ui/ResultsTable/ResultsTable';
 export { RunSelector } from './ui/RunSelector/RunSelector';
+export { RunNameModal } from './ui/RunNameModal/RunNameModal';
 export { StepActions } from './ui/StepActions/StepActions';
 export { HeaderNav } from './ui/HeaderNav/HeaderNav';
 export { PageNames } from './ui/HeaderNav/consts';

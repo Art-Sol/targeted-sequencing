@@ -39,15 +39,15 @@ export const RunSelector = ({
 }: RunSelectorProps) => {
   if (runs.length === 0) return null;
 
-  const confirmDeleteOne = (runId: string) => {
+  const confirmDeleteOne = (run: RunInfo) => {
     if (!onDeleteRun) return;
     Modal.confirm({
       title: 'Удалить этот запуск?',
-      content: formatRunId(runId),
+      content: `${run.name} (${formatRunId(run.runId)})`,
       okText: 'Удалить',
       okType: 'danger',
       cancelText: 'Отмена',
-      onOk: () => onDeleteRun(runId),
+      onOk: () => onDeleteRun(run.runId),
     });
   };
 
@@ -84,29 +84,33 @@ export const RunSelector = ({
       )
     : undefined;
 
-  // Рендер опции в выпадающем списке. Здесь живут иконка-корзина и тег «ошибка».
-  // В свёрнутом Select показывается простой `label` (без кнопки) — это поведение
-  // AntD по умолчанию: optionRender применяется только в раскрытом dropdown'e.
+  // Рендер опции в выпадающем списке: имя крупно, дата мелким шрифтом ниже.
+  // В свёрнутом Select показывается простой `label` (одна строка «имя — дата»)
+  // — это поведение AntD по умолчанию: optionRender применяется только в
+  // раскрытом dropdown'e.
   const optionRender: SelectProps['optionRender'] = (option) => {
     const run = runs.find((r) => r.runId === option.value);
     if (!run) return option.label;
     return (
       <Flex justify="space-between" align="center" gap={8} className={classes.optionLabel}>
-        <span>
-          {formatRunId(run.runId)}
-          {!run.hasResults && (
-            <Tag color="error" className={classes.runErrorTag}>
-              ошибка
-            </Tag>
-          )}
-        </span>
+        <Flex vertical gap={2} className={classes.optionInfo}>
+          <Flex align="center" gap={4} className={classes.optionNameRow}>
+            <span className={classes.optionName}>{run.name}</span>
+            {!run.hasResults && (
+              <Tag color="error" className={classes.runErrorTag}>
+                ошибка
+              </Tag>
+            )}
+          </Flex>
+          <span className={classes.optionDate}>{formatRunId(run.runId)}</span>
+        </Flex>
         {onDeleteRun && (
           <Button
             size="small"
             icon={<DeleteOutlined className={classes.deleteIcon} />}
             onClick={(e) => {
               stopOptionEvents(e);
-              confirmDeleteOne(run.runId);
+              confirmDeleteOne(run);
             }}
             onMouseDown={stopOptionEvents}
           />
@@ -127,7 +131,7 @@ export const RunSelector = ({
       options={runs.map((run) => ({
         value: run.runId,
         disabled: !run.hasResults,
-        label: formatRunId(run.runId),
+        label: `${run.name} — ${formatRunId(run.runId)}`,
       }))}
     />
   );

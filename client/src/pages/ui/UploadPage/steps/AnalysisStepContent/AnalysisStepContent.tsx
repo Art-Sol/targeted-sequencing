@@ -13,6 +13,8 @@ import type {
 
 interface AnalysisStepContentProps {
   pipelineStatus: PipelineStatusType;
+  /** Имя запуска. Прокидывается в ResultsTable как заголовок Card'а. */
+  runName?: string;
   pipelineError?: string;
   samplesProcessed?: number;
   totalSamples?: number;
@@ -29,6 +31,7 @@ interface AnalysisStepContentProps {
 
 export const AnalysisStepContent = ({
   pipelineStatus,
+  runName,
   pipelineError,
   samplesProcessed,
   totalSamples,
@@ -75,6 +78,7 @@ export const AnalysisStepContent = ({
               results={results ?? undefined}
               metric={metric}
               onMetricChange={onMetricChange}
+              runName={runName}
             />
           )}
         </>

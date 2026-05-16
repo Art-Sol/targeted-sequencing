@@ -13,7 +13,7 @@ import { formatBytes } from '../../../shared/lib/format/formatBytes';
 
 import classes from './NewAnalysisPage.module.css';
 import { Step } from '../../module/types';
-import { Stepper, StepActions } from '../../../widgets';
+import { Stepper, StepActions, RunNameModal } from '../../../widgets';
 import { CsvExportButton } from '../../../shared/ui/CsvExportButton/CsvExportButton';
 import { usePipelineStatus } from '../../../shared/hooks/usePipelineStatus';
 import { useResults } from '../../../shared/hooks/useResults';
@@ -43,6 +43,7 @@ export const NewAnalysisPage = ({
   const [processing, setProcessing] = useState(false);
   const [cleanLoading, setCleanLoading] = useState(false);
   const [runLoading, setRunLoading] = useState(false);
+  const [runNameModalOpen, setRunNameModalOpen] = useState(false);
 
   const {
     data: results,
@@ -110,11 +111,20 @@ export const NewAnalysisPage = ({
   };
 
   // ------- Action: запустить анализ (шаг 3) -------
+  //
+  // Двухфазный flow: клик по кнопке открывает модалку ввода имени, реальный
+  // запуск пайплайна — в onOk-колбэке модалки. До подтверждения имени
+  // никаких сетевых запросов и спиннера на кнопке.
 
-  const handleRun = async () => {
+  const handleRun = () => {
+    setRunNameModalOpen(true);
+  };
+
+  const handleRunConfirm = async (name: string) => {
+    setRunNameModalOpen(false);
     setRunLoading(true);
     try {
-      await runPipeline();
+      await runPipeline(name);
       message.success('Анализ запущен');
       pipeline.refresh();
     } catch (err) {
@@ -186,7 +196,12 @@ export const NewAnalysisPage = ({
             {pipeline.status === 'done' ? 'Запустить ещё раз' : 'Запустить анализ'}
           </Button>
           {pipeline.status === 'done' && results && (
-            <CsvExportButton results={results} metric={metric} runId={pipeline.runId} />
+            <CsvExportButton
+              results={results}
+              metric={metric}
+              runId={pipeline.runId}
+              name={pipeline.name}
+            />
           )}
         </StepActions>
       );
@@ -199,6 +214,12 @@ export const NewAnalysisPage = ({
 
   return (
     <Content className={classes.content}>
+      <RunNameModal
+        open={runNameModalOpen}
+        defaultName={pipeline.name ?? 'Анализ'}
+        onOk={handleRunConfirm}
+        onCancel={() => setRunNameModalOpen(false)}
+      />
       <Stepper
         currentStep={currentStep}
         steps={STEPS}
@@ -244,6 +265,7 @@ export const NewAnalysisPage = ({
         {currentStep === 2 && (
           <AnalysisStepContent
             pipelineStatus={pipeline.status}
+            runName={pipeline.name}
             pipelineError={pipeline.error}
             samplesProcessed={pipeline.samplesProcessed}
             totalSamples={pipeline.totalSamples}

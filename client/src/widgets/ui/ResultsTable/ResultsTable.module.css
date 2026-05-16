@@ -31,6 +31,26 @@
   margin: 16px 0;
 }
 
+.cardTitleLeft {
+  min-width: 0;
+}
+
+.runName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tableSummary {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.cardTitleRight {
+  flex-shrink: 0;
+}
+
 /* Подпись-предупреждение под таблицей в режиме Presence.
    display: block нужен, потому что AntD Text рендерится в <span>,
    а у inline-элемента margin-top игнорируется. */

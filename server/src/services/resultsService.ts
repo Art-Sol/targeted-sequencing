@@ -56,6 +56,45 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+/** Метаданные запуска, лежат в `output/<runId>/metadata.json`. */
+interface RunMetadata {
+  name: string;
+  createdAt: string;
+}
+
+/**
+ * Читает metadata.json для runId. Возвращает null если файла нет или
+ * содержимое не соответствует ожидаемой форме (битый JSON, нет name).
+ * Папки без валидных метаданных в `listRuns` не попадают — это инвариант
+ * системы: их пишет dockerService до spawn'а контейнера.
+ */
+async function readRunMetadata(runId: string): Promise<RunMetadata | null> {
+  const metadataPath = path.join(OUTPUT_DIR, runId, 'metadata.json');
+  let content: string;
+  try {
+    content = await fs.readFile(metadataPath, 'utf-8');
+  } catch {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'name' in parsed &&
+      typeof (parsed as { name: unknown }).name === 'string' &&
+      'createdAt' in parsed &&
+      typeof (parsed as { createdAt: unknown }).createdAt === 'string'
+    ) {
+      return parsed as RunMetadata;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // ============================================================
 // Публичные функции
 // ============================================================
@@ -64,6 +103,11 @@ async function fileExists(filePath: string): Promise<boolean> {
  * Возвращает список всех запусков в порядке «самый свежий первым».
  * Включает и упавшие запуски — у них `hasResults === false`. Решение
  * «показывать ли упавшие в UI» — на стороне клиента.
+ *
+ * Папки без валидного `metadata.json` отфильтровываются: metadata —
+ * инвариант системы, его пишет dockerService до spawn'а контейнера.
+ * Если файла нет — папка либо создана вручную, либо данные битые,
+ * показывать такое в истории нечем (нет имени).
  */
 export async function listRuns(): Promise<RunInfo[]> {
   const ids = await listRunIds();
@@ -71,12 +115,35 @@ export async function listRuns(): Promise<RunInfo[]> {
   // обратный порядок.
   const reversed = [...ids].reverse();
 
-  return Promise.all(
-    reversed.map(async (runId) => ({
-      runId,
-      hasResults: await fileExists(path.join(OUTPUT_DIR, runId, 'results.json')),
-    })),
+  const runs = await Promise.all(
+    reversed.map(async (runId) => {
+      const metadata = await readRunMetadata(runId);
+      if (!metadata) return null;
+      return {
+        runId,
+        name: metadata.name,
+        hasResults: await fileExists(path.join(OUTPUT_DIR, runId, 'results.json')),
+      };
+    }),
   );
+
+  return runs.filter((run): run is RunInfo => run !== null);
+}
+
+/**
+ * Пишет metadata.json в папку запуска. Зовётся из dockerService
+ * сразу после `mkdir output/<runId>/`, до spawn'а контейнера — чтобы
+ * даже упавшие запуски попадали в историю с именем.
+ *
+ * Папка `output/<runId>/` должна существовать (создаётся в dockerService).
+ */
+export async function saveRunMetadata(runId: string, name: string): Promise<void> {
+  const metadataPath = path.join(OUTPUT_DIR, runId, 'metadata.json');
+  const metadata: RunMetadata = {
+    name,
+    createdAt: new Date().toISOString(),
+  };
+  await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf-8');
 }
 
 /**

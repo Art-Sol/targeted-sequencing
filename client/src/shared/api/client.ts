@@ -185,11 +185,14 @@ export async function retryImageLoad(): Promise<void> {
  * Запускает анализ. Перед запуском сервер сам проверяет,
  * что все файлы загружены (list_reads.txt + FASTQ).
  *
+ * @param name — пользовательское имя анализа. Сервер валидирует regex'ом
+ *   /^[\p{L}\p{N} _]+$/u, длиной 1-100, на невалид — 400.
+ *
  * Возвращает ID запуска (формат: 2024-01-15_143022).
  * Если пайплайн уже запущен — сервер вернёт 409.
  */
-export async function runPipeline(): Promise<{ message: string; runId: string }> {
-  const response = await api.post('/api/pipeline/run');
+export async function runPipeline(name: string): Promise<{ message: string; runId: string }> {
+  const response = await api.post('/api/pipeline/run', { name });
   return response.data;
 }
 

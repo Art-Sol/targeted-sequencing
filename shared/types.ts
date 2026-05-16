@@ -22,6 +22,8 @@ export type PipelineStatus = 'idle' | 'running' | 'done' | 'error';
 export interface PipelineStatusResponse {
   status: PipelineStatus;
   runId?: string;
+  /** Имя текущего запуска. Отсутствует при status='idle'. */
+  name?: string;
   exitCode?: number;
   error?: string;
   samplesProcessed?: number;
@@ -92,6 +94,8 @@ export interface ApiError {
 export interface RunInfo {
   /** ID запуска в формате YYYY-MM-DD_HHmmss (см. dockerService.formatRunId). */
   runId: string;
+  /** Пользовательское имя запуска из metadata.json. Папки без metadata.json в listRuns не попадают. */
+  name: string;
   /** true, если на диске есть results.json — запуск завершился успешно. */
   hasResults: boolean;
 }
